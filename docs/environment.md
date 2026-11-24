@@ -12,13 +12,13 @@
 
 ## OS ごとの違い
 
-どの OS でも、要るのは Node.js と Go だけ (版は [パイプライン](パイプライン.md))。ライブラリを OS ごとに変える必要はない
+どの OS でも、要るのは Node.js と Go だけ (版は [パイプライン](pipeline.md))。ライブラリを OS ごとに変える必要はない
 (OS ごとに違う部品は、3 つの OS 分が `frontend/package-lock.json` に入っていて、`npm ci` が自動で選ぶ)。
 
 | OS | 違い・注意 |
 |---|---|
 | macOS | 特に無い |
-| Linux | 別の Linux に持っていく実行ファイルは `CGO_ENABLED=0` を付けて作る ([パイプライン](パイプライン.md) の「デプロイ」) |
+| Linux | 別の Linux に持っていく実行ファイルは `CGO_ENABLED=0` を付けて作る ([パイプライン](pipeline.md) の「デプロイ」) |
 | Windows | **WSL は要らない。** PowerShell で同じコマンドが使える。実行ファイルは `qr-server.exe`、起動は `.\qr-server.exe` |
 
 ### Windows で WSL を使う場合

@@ -18,15 +18,15 @@ go build
 ```
 
 ブラウザで http://localhost:8080/ を開く (Windows の PowerShell では最後を `.\qr-server.exe`)。
-スマホから使うには HTTPS が要る → [環境と HTTPS](docs/環境とHTTPS.md)。
+スマホから使うには HTTPS が要る → [環境と HTTPS](docs/environment.md)。
 
 ## 文書
 
 | 知りたいこと | 文書 |
 |---|---|
-| どう動いているか (構成・仕組み・ファイルの役割・使っているもの) | [アーキテクチャ](docs/アーキテクチャ.md) |
-| 機能を足してデプロイするまで (編集する所・コマンドとその意味・例) | [パイプライン](docs/パイプライン.md) |
-| OS ごとの注意・WSL・ファイアウォール・IP アドレス・HTTPS の証明書と警告 | [環境と HTTPS](docs/環境とHTTPS.md) |
+| どう動いているか (構成・仕組み・ファイルの役割・使っているもの) | [アーキテクチャ](docs/architecture.md) |
+| 機能を足してデプロイするまで (編集する所・コマンドとその意味・例) | [パイプライン](docs/pipeline.md) |
+| OS ごとの注意・WSL・ファイアウォール・IP アドレス・HTTPS の証明書と警告 | [環境と HTTPS](docs/environment.md) |
 
 ## どこを直すか (早見表)
 
@@ -41,7 +41,7 @@ go build
 | API を足す | `server.go` の `newHandler` と「API」の節 |
 | 起動オプションを足す | `main.go` の `main` |
 
-手順の例は [パイプライン](docs/パイプライン.md) の「例」。
+手順の例は [パイプライン](docs/pipeline.md) の「例」。
 
 ## 構成
 
@@ -62,4 +62,4 @@ qr-server/
 
 - 確かめたこと: この Mac で、偽のカメラによる読み取り・設定・履歴、HTTPS、3 つの OS 向けの実行ファイルができること
 - まだ確かめていないこと: Windows・Linux の実機での起動とファイアウォール、本物のスマホとカメラ
-- 詳しくは [アーキテクチャ](docs/アーキテクチャ.md) の「確かめたこと」
+- 詳しくは [アーキテクチャ](docs/architecture.md) の「確かめたこと」

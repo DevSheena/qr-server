@@ -11,7 +11,7 @@
 | git | — | 変更の記録。あれば、どのコミットから作ったかが実行ファイルに入る |
 
 インターネットを使うのは `npm ci` (画面の依存を入れる) だけ。動かす PC (LAN) には何も入れなくてよい (実行ファイルだけ)。
-OS ごとの注意は [環境と HTTPS](環境とHTTPS.md)。
+OS ごとの注意は [環境と HTTPS](environment.md)。
 
 ## 1 回の流れ
 
@@ -61,7 +61,7 @@ git commit -m "何を変えたか"
 | `go run <ファイル>` | その場でコンパイルして 1 回だけ実行する (実行ファイルは残らない)。証明書を作る時に使う |
 | `./qr-server` | サーバーを起動する。動いている間だけサーバーになり、Ctrl+C で止まる |
 
-**Vite は要るのか:** 作る時だけ要る (動かす PC には要らない)。TypeScript を JavaScript にし、zxing の Worker と WASM を含めてまとめ、小さくし、ファイル名にハッシュを付ける。詳しくは [アーキテクチャ](アーキテクチャ.md) の「ビルドで何が起きるか」。
+**Vite は要るのか:** 作る時だけ要る (動かす PC には要らない)。TypeScript を JavaScript にし、zxing の Worker と WASM を含めてまとめ、小さくし、ファイル名にハッシュを付ける。詳しくは [アーキテクチャ](architecture.md) の「ビルドで何が起きるか」。
 
 ## 例
 
@@ -199,7 +199,7 @@ $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o qr-ser
 
 ### 2. 置いて起動する
 
-1. 実行ファイルと、HTTPS の証明書・鍵 (`cert.pem`・`key.pem`) を、USB や scp で動かす PC にコピーする (証明書の作り方は [環境と HTTPS](環境とHTTPS.md))
+1. 実行ファイルと、HTTPS の証明書・鍵 (`cert.pem`・`key.pem`) を、USB や scp で動かす PC にコピーする (証明書の作り方は [環境と HTTPS](environment.md))
 2. 前の版が動いていれば Ctrl+C で止め、ファイルを置き換える
 3. 起動する
 
@@ -218,6 +218,6 @@ PC を起動した時に自動で立ち上げる設定 (Linux の systemd、Wind
 | `go build` が `pattern web: no matching files found` で止まる | 画面をまだビルドしていない。`frontend` で `npm run build` |
 | `npm ci` が lock と合わないと言って止まる | `package.json` だけ書き換えた。`npm install` で lock も直す |
 | 起動すると `address already in use` (Windows では `Only one usage of each socket address`) | そのポートを別のプログラムが使っている。`-addr :8081` などに変える |
-| スマホでカメラが始まらない | HTTP で開いている。HTTPS で開く ([環境と HTTPS](環境とHTTPS.md)) |
-| ほかの端末から開けない | ファイアウォールか IP アドレスの間違い ([環境と HTTPS](環境とHTTPS.md)) |
+| スマホでカメラが始まらない | HTTP で開いている。HTTPS で開く ([環境と HTTPS](environment.md)) |
+| ほかの端末から開けない | ファイアウォールか IP アドレスの間違い ([環境と HTTPS](environment.md)) |
 | 画面を直したのに変わらない | `npm run build` と `go build` をやり直し、サーバーを起動し直す |
