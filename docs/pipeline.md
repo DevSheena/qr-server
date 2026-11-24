@@ -35,7 +35,7 @@ cd ..
 # 3. テスト (サーバー。web/ が要るので画面のビルドの後)
 go test ./...
 
-# 4. 実行ファイルを作って、手元で動かす (http://localhost:8080/ を開く。Ctrl+C で止める)
+# 4. 実行ファイルを作って、手元で動かす (https://localhost:8443/ を開く。初回だけブラウザが警告する。Ctrl+C で止める)
 go build
 ./qr-server
 
@@ -58,8 +58,8 @@ git commit -m "何を変えたか"
 | `go build` | `web/` を埋め込んで実行ファイルを作る (`qr-server`、Windows は `qr-server.exe`) |
 | `go test ./...` | このフォルダ以下の Go のテストを全部流す |
 | `go vet ./...` | 間違いやすい書き方を探す (任意) |
-| `go run <ファイル>` | その場でコンパイルして 1 回だけ実行する (実行ファイルは残らない)。証明書を作る時に使う |
-| `./qr-server` | サーバーを起動する。動いている間だけサーバーになり、Ctrl+C で止まる |
+| `go run .` | その場でコンパイルして 1 回だけ実行する (実行ファイルは残らない。証明書も一時フォルダに作られて残らないので、ふだんは `go build` を使う) |
+| `./qr-server` | サーバーを起動する (HTTPS の :8443)。動いている間だけサーバーになり、Ctrl+C で止まる。初回は隣に証明書を作る |
 
 **Vite は要るのか:** 作る時だけ要る (動かす PC には要らない)。TypeScript を JavaScript にし、zxing の Worker と WASM を含めてまとめ、小さくし、ファイル名にハッシュを付ける。詳しくは [アーキテクチャ](architecture.md) の「ビルドで何が起きるか」。
 
@@ -199,15 +199,16 @@ $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o qr-ser
 
 ### 2. 置いて起動する
 
-1. 実行ファイルと、HTTPS の証明書・鍵 (`cert.pem`・`key.pem`) を、USB や scp で動かす PC にコピーする (証明書の作り方は [環境と HTTPS](environment.md))
-2. 前の版が動いていれば Ctrl+C で止め、ファイルを置き換える
+1. 実行ファイルを、USB や scp で動かす PC の、書き込めるフォルダにコピーする
+2. 前の版が動いていれば Ctrl+C で止め、実行ファイルだけを置き換える (隣の `qr-server.crt`・`qr-server.key` は残す。消すと証明書が変わり、すべての端末でまた警告が出る)
 3. 起動する
 
    ```bash
-   ./qr-server-linux -addr :8443 -cert cert.pem -key key.pem
+   ./qr-server-linux
    ```
 
-4. 別の端末で `https://<動かす PC の IP>:8443/api/health` を開き、`version` が記録したコミットと同じか確かめる
+   初回は、同じフォルダに証明書 (`qr-server.crt`・`qr-server.key`) ができる。ログに出る「開く URL」を控える
+4. 別の端末で `https://<動かす PC の IP>:8443/api/health` を開き、`version` が記録したコミットと同じか確かめる (初回は警告を越える)
 
 PC を起動した時に自動で立ち上げる設定 (Linux の systemd、Windows のタスク スケジューラ など) は、まだ用意していない。
 
@@ -218,6 +219,8 @@ PC を起動した時に自動で立ち上げる設定 (Linux の systemd、Wind
 | `go build` が `pattern web: no matching files found` で止まる | 画面をまだビルドしていない。`frontend` で `npm run build` |
 | `npm ci` が lock と合わないと言って止まる | `package.json` だけ書き換えた。`npm install` で lock も直す |
 | 起動すると `address already in use` (Windows では `Only one usage of each socket address`) | そのポートを別のプログラムが使っている。`-addr :8081` などに変える |
-| スマホでカメラが始まらない | HTTP で開いている。HTTPS で開く ([環境と HTTPS](environment.md)) |
+| スマホでカメラが始まらない | HTTP で開いている (`-http` を付けて起動した)。HTTPS で開く ([環境と HTTPS](environment.md)) |
+| 起動すると「秘密鍵を保存できない」で止まる | 実行ファイルのフォルダに書き込めない。書き込めるフォルダに置く |
+| ログに「証明書に、この PC の今の IP アドレスが入っていない」 | IP アドレスが変わった。`qr-server.crt`・`qr-server.key` を消して起動し直す (端末ではもう一度警告が出る) |
 | ほかの端末から開けない | ファイアウォールか IP アドレスの間違い ([環境と HTTPS](environment.md)) |
 | 画面を直したのに変わらない | `npm run build` と `go build` をやり直し、サーバーを起動し直す |

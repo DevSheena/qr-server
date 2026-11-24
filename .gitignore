@@ -8,8 +8,10 @@
 /build/
 /qr-server
 /qr-server.exe
-# HTTPS の証明書と秘密鍵 (秘密鍵は人に渡さない)
+# HTTPS の証明書と秘密鍵 (自動で作るもの・手で作ったもの。秘密鍵は人に渡さない)
 *.pem
+qr-server.crt
+qr-server.key
 
 # 画面の依存 (Docker の名前付きボリュームに置く。ここにあるのはマウント先の空のフォルダ)
 frontend/node_modules/

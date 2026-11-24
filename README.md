@@ -1,7 +1,7 @@
 # qr-server — QR・バーコードリーダー (Go のサーバー版)
 
 ブラウザで動く QR・バーコードリーダーの画面と API を、**実行ファイル 1 つ**で配るサーバー。
-画面のファイルは実行ファイルに埋め込んであるので、LAN の PC に実行ファイルを置いて起動すれば、
+画面のファイルは実行ファイルに埋め込んであり、HTTPS の証明書も初回の起動で自動で作るので、LAN の PC に実行ファイルを置いて起動すれば、
 同じネットワークのスマホや PC のブラウザから使える。Linux・Windows・Mac のどれでも同じ手順で作れる (Docker は要らない)。
 
 ## すぐ試す
@@ -17,8 +17,10 @@ go build
 ./qr-server
 ```
 
-ブラウザで http://localhost:8080/ を開く (Windows の PowerShell では最後を `.\qr-server.exe`)。
-スマホから使うには HTTPS が要る → [環境と HTTPS](docs/environment.md)。
+ブラウザで https://localhost:8443/ を開く (Windows の PowerShell では最後を `.\qr-server.exe`)。
+HTTPS の証明書は初回の起動で自動で作るので、初回だけブラウザが警告を出す (「詳細」などから進む)。
+同じネットワークのスマホからは、起動した時にログに出る URL (`https://<この PC の IP>:8443/`) で開く。
+警告の理由・ファイアウォール・IP アドレスは [環境と HTTPS](docs/environment.md)。
 
 ## 文書
 
@@ -49,7 +51,8 @@ go build
 qr-server/
 ├─ main.go          起動 (起動オプション・画面の埋め込み・版)
 ├─ server.go        要求の受け方 (API・画面の配信・安全のためのヘッダ・ログ)
-├─ server_test.go
+├─ cert.go          HTTPS の証明書 (初回の起動で自動で作り、次からは使い回す)
+├─ *_test.go        テスト
 ├─ go.mod           外部の依存なし (標準ライブラリだけ)
 ├─ frontend/        画面のソース (Vite + TypeScript)。npm run build で ../web/ に出る
 ├─ web/             ブラウザに配るファイル (ビルドで作る。git に入れない)
@@ -60,6 +63,6 @@ qr-server/
 
 ## 今の状態 (2026-11-24)
 
-- 確かめたこと: この Mac で、偽のカメラによる読み取り・設定・履歴、HTTPS、3 つの OS 向けの実行ファイルができること
+- 確かめたこと: この Mac で、偽のカメラによる読み取り・設定・履歴、HTTPS (証明書を初回に作り、2 回目の起動で使い回す)、3 つの OS 向けの実行ファイルができること
 - まだ確かめていないこと: Windows・Linux の実機での起動とファイアウォール、本物のスマホとカメラ
 - 詳しくは [アーキテクチャ](docs/architecture.md) の「確かめたこと」

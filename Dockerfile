@@ -4,7 +4,8 @@ FROM gcr.io/distroless/static-debian13:nonroot
 # docker build --platform linux/<CPU> の CPU (BuildKit が入れる)
 ARG TARGETARCH
 COPY build/linux-${TARGETARCH}/qr-server /qr-server
-# 既定では :8080 で待つ (起動オプションは docker run のイメージ名の後ろに書く。例: -addr :8443 -cert ... -key ...)
-EXPOSE 8080
+# 既定では HTTPS の :8443 で待つ (-http なら :8080)。起動オプションは docker run のイメージ名の後ろに書く。
+# この中には証明書を自動で作れない (実行ファイルの隣に書き込めない) ので、HTTPS は -cert・-key で渡す (bin/serve.sh)
+EXPOSE 8443 8080
 USER nonroot
 ENTRYPOINT ["/qr-server"]

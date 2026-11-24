@@ -143,10 +143,17 @@ func TestOpenURLs(t *testing.T) {
 	}
 }
 
-func TestCertAndKeyGoTogether(t *testing.T) {
-	err := run(":0", "cert.pem", "", slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err == nil || !strings.Contains(err.Error(), "-cert と -key") {
-		t.Errorf("err = %v", err)
+func TestOptionsThatDoNotGoTogether(t *testing.T) {
+	for _, tt := range []struct {
+		o    options
+		want string
+	}{
+		{options{cert: "my.crt"}, "-cert と -key"},
+		{options{plainHTTP: true, cert: "my.crt", key: "my.key"}, "-http と -cert"},
+	} {
+		if err := run(tt.o, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%+v: err = %v", tt.o, err)
+		}
 	}
 }
 
