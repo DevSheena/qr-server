@@ -5,16 +5,17 @@
 # ビルドで作るもの (作り直せる)
 # web/ は frontend/ のビルド結果 (ブラウザに配るファイル)。Go の実行ファイルに埋め込む
 /web/
-/build/
 /qr-server
 /qr-server.exe
-# HTTPS の証明書と秘密鍵 (自動で作るもの・手で作ったもの。秘密鍵は人に渡さない)
-*.pem
+# mac-docker/dev.sh が作る実行ファイル
+/build/
+
+# HTTPS の証明書と秘密鍵 (起動した時に自動で作るもの・持ってきたもの。秘密鍵は人に渡さない)
 qr-server.crt
 qr-server.key
+*.pem
 
-# 画面の依存 (Docker の名前付きボリュームに置く。ここにあるのはマウント先の空のフォルダ)
+# 画面の依存 (npm ci で入る)
 frontend/node_modules/
+# mac-docker/dev.sh が、依存を入れ直すかどうかの目印にする
 frontend/.installed
-# ビルドの前に作るもの (frontend/scripts/prepare.mjs で作り直せる)
-frontend/public/third-party-licenses.txt

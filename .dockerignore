@@ -1,3 +1,0 @@
-# イメージに入れるのはビルド済みの実行ファイルだけ (Dockerfile を参照)
-*
-!build/linux-*/qr-server

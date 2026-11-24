@@ -1,11 +1,5 @@
-// QR・バーコードリーダーの画面の組み立て。ここでは部品を作ってつなぐだけで、中身はそれぞれのファイルにある。
-//
-//   camera.ts       カメラ                     scan-loop.ts      読み取りの繰り返し
-//   scanner/        読み取り (内蔵と zxing)      frame.ts          解析する画像 (範囲・縮小)
-//   tracks.ts       枠の追跡と先読み             overlay.ts        枠の描画
-//   history.ts      読んだ内容の記録             results-view.ts   読んだ内容の表示
-//   settings.ts     設定の保存と決まりごと       settings-view.ts  設定の画面
-//   sheets.ts       設定・履歴のシート           text.ts           画面に出す文字
+// QR・バーコードリーダーの画面の組み立て。ここでは部品を作ってつなぐだけで、中身はそれぞれのファイルにある
+// (ファイルの役割の一覧は docs/architecture.md)。
 //
 // 流れ: カメラ → (映像の画面ごとに) 解析する画像 → 読み取り → 記録・表示・知らせ / 枠の追跡 → (描画ごとに) 枠の描画
 
@@ -21,10 +15,10 @@ import { HistoryList, LatestCard } from './results-view';
 import { ScanLoop, ScanStats } from './scan-loop';
 import { browserScannerDeps, nativeFormats } from './scanner/browser';
 import { Scanner } from './scanner/scanner';
-import { SettingsStore, browserStorage, mirrorFor, touches } from './settings';
+import { SettingsStore, browserStorage, touches } from './settings';
 import { buildSettingsView } from './settings-view';
 import { Sheets } from './sheets';
-import { cameraErrorText, codeLabel, statusText } from './text';
+import { LABEL, MSG, codeLabel, statusText } from './text';
 import { Tracker } from './tracks';
 
 // ---------- 部品 ----------
@@ -42,9 +36,9 @@ const overlay = new Overlay(ui.overlay);
 const latest = new LatestCard({ root: ui.latest, meta: ui.latestMeta, text: ui.latestText, copy: ui.latestCopy, open: ui.latestOpen }, copy);
 const historyList = new HistoryList({ list: ui.list, empty: ui.empty, count: ui.count }, copy);
 const settingsView = buildSettingsView(ui.settings, store);
-const sheets = new Sheets({ settings: { el: ui.settingsSheet, button: ui.settingsBtn }, history: { el: ui.historySheet, button: ui.historyBtn } }, (open) =>
-  latest.setCovered(open !== null),
-);
+new Sheets(document, (open) => latest.setCovered(open !== null)); // シートの開け閉め (つなぎは index.html から組み立てる)
+/** カメラを使う状態か (開いている途中も含む。「停止」を押すまで true)。camera.running は映っている時だけ true なので、操作の判断にはこちらを使う */
+let cameraOn = false;
 /** 「1 つ読んだら止める」で止まっている */
 let paused = false;
 const loop = new ScanLoop({ video: ui.video, step: scanOnce, canScan: () => !paused && scanner.ready, hz: () => store.value.hz });
@@ -70,7 +64,7 @@ async function configureScanner() {
     const plan = await scanner.configure(s.formats, s.mode, s.tryHarder);
     if (plan) settingsView.showEngines(plan);
   } catch (e) {
-    showMsg(`読み取りの準備に失敗: ${e}`, true);
+    showMsg(MSG.scannerFailed(e), true);
   }
   renderStatus();
 }
@@ -89,7 +83,7 @@ async function scanOnce(tFrame: number) {
   for (const c of codes) showResult(history.record(c, Date.now()));
   if (s.stopAfterOne) {
     paused = true;
-    showMsg('読み取りました。画面をタップすると続けます');
+    showMsg(MSG.paused);
   }
 }
 
@@ -97,6 +91,12 @@ function showResult(r: Recorded) {
   historyList.show(r, history.size);
   latest.show(r);
   if (r.fresh) notifier.notify(store.value);
+}
+
+function clearResults() {
+  history.clear();
+  historyList.clear();
+  latest.hide();
 }
 
 // ---------- 枠の描画 (画面の描画ごと) ----------
@@ -111,20 +111,21 @@ function drawOverlay() {
 
 // ---------- カメラ ----------
 async function startCamera() {
-  if (!camera.available) return showMsg('この画面ではカメラを使えません。https:// で開いてください', true);
+  if (!camera.available) return showMsg(MSG.noCameraHere, true);
+  cameraOn = true;
   ui.startBig.hidden = true;
   try {
-    await camera.start(store.value);
+    if (!(await camera.start(store.value))) return; // 開いている途中で、次の開き直しや停止に追い越された
   } catch (e) {
     if (isMissingDevice(e, store.value)) {
       store.update({ camera: 'environment' }); // 覚えていたカメラが無くなった
       return startCamera();
     }
     stopCamera();
-    return showMsg(`カメラを開けません: ${cameraErrorText(e)}`, true);
+    return showMsg(MSG.cameraFailed(e), true);
   }
   paused = false;
-  ui.startBtn.textContent = '停止';
+  ui.startBtn.textContent = LABEL.stop;
   ui.torch.hidden = !camera.hasTorch;
   ui.torch.setAttribute('aria-pressed', 'false');
   showMsg();
@@ -134,11 +135,12 @@ async function startCamera() {
 }
 
 function stopCamera() {
+  cameraOn = false;
   loop.stop();
   camera.stop();
   tracker.clear();
   ui.torch.hidden = true;
-  ui.startBtn.textContent = '開始';
+  ui.startBtn.textContent = LABEL.start;
   ui.startBig.hidden = false;
   renderStatus();
 }
@@ -152,7 +154,7 @@ function start() {
 // ---------- 操作 ----------
 ui.startBig.addEventListener('click', start);
 ui.startBtn.addEventListener('click', () => {
-  if (!camera.running) return start();
+  if (!cameraOn) return start();
   stopCamera();
   showMsg();
 });
@@ -162,7 +164,7 @@ ui.torch.addEventListener('click', async () => {
     await camera.setTorch(on);
     ui.torch.setAttribute('aria-pressed', String(on));
   } catch (e) {
-    showMsg(`ライトを切り替えられません: ${e}`, true);
+    showMsg(MSG.torchFailed(e), true);
   }
 });
 // 「1 つ読んだら止める」で止まっている時は、カメラの部分をタップすると続ける (ボタンや結果の上のタップは除く)
@@ -171,21 +173,16 @@ ui.stage.addEventListener('click', (e) => {
   paused = false;
   showMsg();
 });
-ui.clear.addEventListener('click', () => {
-  history.clear();
-  historyList.clear();
-  latest.hide();
-});
-ui.closeButtons.forEach((b) => b.addEventListener('click', () => sheets.show(null)));
+ui.clear.addEventListener('click', clearResults);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) loop.resume();
 });
 
-// 設定が変わった時の動き (設定の画面の表示は settings-view.ts が自分で直す)。設定を足して動きが要る時は、ここに 1 行足す
+// 設定が変わった時の動き (設定の画面の表示は settings-view.ts が、ほかの設定を合わせて変える決まりは settings.ts の RULES が受け持つ)。
+// 設定を足して動きが要る時は、ここに 1 行足す
 store.subscribe((s, changed) => {
-  if (changed.has('camera')) store.update(mirrorFor(s.camera)); // 前面カメラは左右反転にする
   if (touches(changed, 'formats', 'mode', 'tryHarder')) void configureScanner();
-  if (touches(changed, 'res', 'camera') && camera.running) void startCamera();
+  if (touches(changed, 'res', 'camera') && cameraOn) void startCamera();
   if (changed.has('mirror')) applyMirror(s.mirror);
   if (changed.has('beep') && s.beep) notifier.prepareSound();
 });
@@ -200,7 +197,7 @@ void (async () => {
   if (await cameraPermitted()) start();
 })();
 
-// テストや確認用 (画面には出さない)
+// 確認用の窓口 (画面には出さない)。ブラウザの開発者ツールから qrReader.timing() などで、読み取りの速さや枠の先読みを見られる
 Object.assign(globalThis, {
   qrReader: {
     scanner,

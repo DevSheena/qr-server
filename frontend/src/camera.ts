@@ -36,6 +36,8 @@ export async function cameraPermitted(): Promise<boolean> {
 
 export class Camera {
   private stream: MediaStream | null = null;
+  /** start・stop のたびに増やす番号。開いている途中で追い越されたかを見分ける (2 つのカメラが開いたままにならないように) */
+  private generation = 0;
 
   constructor(
     private readonly video: HTMLVideoElement,
@@ -55,16 +57,33 @@ export class Camera {
     return this.running && w && h ? { w, h } : null;
   }
 
-  /** 開く (開いていれば閉じてから)。開けなければ getUserMedia のエラーを投げる */
-  async start(choice: CameraChoice) {
+  /**
+   * 開く (開いていれば閉じてから)。開いたら true。
+   * 開いている途中で、次の start か stop に追い越されたら、開いたカメラをすぐ閉じて false (呼んだ側は何もしなくてよい)。
+   * 開けなければ getUserMedia のエラーを投げる。
+   */
+  async start(choice: CameraChoice): Promise<boolean> {
     this.stop();
-    const stream = await this.media!.getUserMedia({ video: videoConstraints(choice), audio: false });
+    const generation = this.generation;
+    let stream: MediaStream;
+    try {
+      stream = await this.media!.getUserMedia({ video: videoConstraints(choice), audio: false });
+    } catch (e) {
+      if (generation !== this.generation) return false; // 追い越された後の失敗は、知らせない
+      throw e;
+    }
+    if (generation !== this.generation) {
+      stream.getTracks().forEach((t) => t.stop());
+      return false;
+    }
     this.stream = stream;
     this.video.srcObject = stream;
     await this.video.play().catch(() => {});
+    return true;
   }
 
   stop() {
+    this.generation++;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.video.srcObject = null;
@@ -84,9 +103,9 @@ export class Camera {
     await this.track?.applyConstraints({ advanced: [{ torch: on } as MediaTrackConstraintSet] });
   }
 
-  /** この端末のカメラ (許可した後でないと名前が分からない) */
+  /** この端末のカメラ。label は、許可した後でないと空のことがある */
   async list(): Promise<CameraInfo[]> {
     const devices = (await this.media?.enumerateDevices()) ?? [];
-    return devices.filter((d) => d.kind === 'videoinput' && d.deviceId).map((d, i) => ({ id: d.deviceId, label: d.label || `カメラ ${i + 1}` }));
+    return devices.filter((d) => d.kind === 'videoinput' && d.deviceId).map((d) => ({ id: d.deviceId, label: d.label }));
   }
 }

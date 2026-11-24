@@ -4,10 +4,10 @@
 
 import type { CameraInfo } from './camera';
 import { el } from './dom';
-import { FORMAT_INFO, FORMATS, PRESETS } from './formats';
-import type { EnginePlan } from './scanner/plan';
-import { CUSTOM_PRESET, SETTINGS, withFormats, withPreset, type CheckDef, type Choice, type SelectDef, type Settings, type SettingsStore } from './settings';
-import { engineNote, formatsNote, type Note } from './text';
+import { FORMAT_INFO, FORMATS, PRESETS, presetFor } from './formats';
+import type { EnginePlan } from './scanner/engines';
+import { SETTINGS, type CheckDef, type Choice, type SelectDef, type Settings, type SettingsStore } from './settings';
+import { LABEL, engineNote, formatsNote, type Note } from './text';
 
 export interface SettingsView {
   /** 内蔵の読み取りが使えるか (使えなければ「方式」の「内蔵だけ」を選べなくする) */
@@ -22,6 +22,7 @@ type Key = keyof typeof SETTINGS;
 type Value = string | number | boolean;
 
 export function buildSettingsView(root: HTMLElement, store: SettingsStore): SettingsView {
+  // 表の設定は型がいろいろなので、ここでは値をまとめて扱う (型は settings.ts の表が決めている)
   const read = (key: Key) => store.value[key] as Value;
   const write = (key: Key, v: Value) => store.update({ [key]: v } as Partial<Settings>);
   const selects = new Map<Key, SelectControl>();
@@ -37,19 +38,20 @@ export function buildSettingsView(root: HTMLElement, store: SettingsStore): Sett
     } else {
       const c = checkControl(def.label, read(key) as boolean, (v) => write(key, v));
       store.subscribe(() => c.set(read(key) as boolean));
+      // 同じ見出しのチェックは 1 行にまとめる。説明はチェックごとに、その下に出す
       let box = checkBoxes.get(def.row);
       if (!box) {
         box = el('div', { className: 'checks' });
         checkBoxes.set(def.row, box);
-        rows.push(row(def.row, box, def.note).el);
+        rows.push(row(def.row, box).el);
       }
-      box.append(c.el);
+      box.append(c.el, ...(def.note === undefined ? [] : [el('div', { className: 'note', text: def.note })]));
     }
   }
 
   // 「方式」の下: どの種類をどちらで読むか (読み取りの準備ができたら出す) と、内蔵が無い環境ではその理由
   const modeNote = el('div', { className: 'note' });
-  const noNative = el('div', { className: 'note', text: 'この環境にはブラウザ内蔵の読み取り (BarcodeDetector) が無いので、zxing-wasm で読む' });
+  const noNative = el('div', { className: 'note', text: LABEL.noNative });
   noNative.hidden = true;
   selects.get('mode')?.el.after(modeNote, noNative);
 
@@ -62,27 +64,34 @@ export function buildSettingsView(root: HTMLElement, store: SettingsStore): Sett
     showEngines: (plan) => setNote(modeNote, engineNote(plan)),
     showCameras(cameras) {
       const c = selects.get('camera');
-      c?.setChoices([...SETTINGS.camera.choices, ...cameras.map((x): Choice<string> => [x.id, x.label])]);
+      c?.setChoices([...SETTINGS.camera.choices, ...cameras.map((x, i): Choice<string> => [x.id, x.label || LABEL.camera(i + 1)])]);
       c?.set(store.value.camera);
     },
   };
 }
 
-/** 「読む種類」の行: プリセットの選択と、種類ごとのチェックボックス */
+const CUSTOM = 'custom';
+
+/** 「読む種類」の行: プリセットの選択と、種類ごとのチェックボックス。保存するのは読む種類だけで、プリセットはそこから求める */
 function formatsRow(store: SettingsStore): HTMLElement {
   const s = store.value;
-  const presetChoices: Choice<string>[] = [...PRESETS.map((p): Choice<string> => [p.id, p.label]), [CUSTOM_PRESET, '自分で選ぶ']];
-  const preset = selectControl(presetChoices, s.preset, (id) => store.update(withPreset(String(id))));
+  const presetChoices: Choice<string>[] = [...PRESETS.map((p): Choice<string> => [p.id, p.label]), [CUSTOM, LABEL.customPreset]];
+  const presetOf = (now: Settings) => presetFor(now.formats)?.id ?? CUSTOM;
+  const preset = selectControl(presetChoices, presetOf(s), (id) => {
+    const p = PRESETS.find((x) => x.id === id);
+    if (p) store.update({ formats: p.formats }); // 「自分で選ぶ」を選んだ時は、読む種類はそのまま
+  });
   const boxes = FORMATS.map((f) =>
-    checkControl(FORMAT_INFO[f].label, s.formats.includes(f), () => store.update(withFormats(FORMATS.filter((_, i) => boxes[i].input.checked)))),
+    checkControl(FORMAT_INFO[f].label, s.formats.includes(f), () => store.update({ formats: FORMATS.filter((_, i) => boxes[i].input.checked) })),
   );
-  const r = row('読む種類', el('div', {}, [preset.el, el('div', { className: 'fmts' }, boxes.map((b) => b.el))]), '');
-  const sync = (now: Settings) => {
-    preset.set(now.preset);
+  const r = row(LABEL.formatsRow, el('div', {}, [preset.el, el('div', { className: 'fmts' }, boxes.map((b) => b.el))]), '');
+  const sync = () => {
+    const now = store.value;
+    preset.set(presetOf(now));
     boxes.forEach((b, i) => b.set(now.formats.includes(FORMATS[i])));
     setNote(r.note, formatsNote(now.formats.length));
   };
-  sync(s);
+  sync();
   store.subscribe(sync);
   return r.el;
 }

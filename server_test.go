@@ -143,16 +143,24 @@ func TestOpenURLs(t *testing.T) {
 	}
 }
 
-func TestOptionsThatDoNotGoTogether(t *testing.T) {
+func TestOptions(t *testing.T) {
 	for _, tt := range []struct {
-		o    options
-		want string
+		o       options
+		wantErr string // 空なら、エラーにならないこと
+		addr    string
 	}{
-		{options{cert: "my.crt"}, "-cert と -key"},
-		{options{plainHTTP: true, cert: "my.crt", key: "my.key"}, "-http と -cert"},
+		{options{}, "", ":8443"},
+		{options{plainHTTP: true}, "", ":8080"},
+		{options{addr: ":9443", cert: "my.crt", key: "my.key"}, "", ":9443"},
+		{options{cert: "my.crt"}, "-cert と -key", ""},
+		{options{plainHTTP: true, cert: "my.crt", key: "my.key"}, "-http と -cert", ""},
 	} {
-		if err := run(tt.o, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil || !strings.Contains(err.Error(), tt.want) {
-			t.Errorf("%+v: err = %v", tt.o, err)
+		err := tt.o.validate()
+		if (err == nil) != (tt.wantErr == "") || (err != nil && !strings.Contains(err.Error(), tt.wantErr)) {
+			t.Errorf("%+v: err = %v, want %q", tt.o, err, tt.wantErr)
+		}
+		if tt.addr != "" && tt.o.listenAddr() != tt.addr {
+			t.Errorf("%+v: addr = %q, want %q", tt.o, tt.o.listenAddr(), tt.addr)
 		}
 	}
 }

@@ -1,11 +1,22 @@
-// 読み取りの中心: 読む種類と方式から振り分け (plan.ts) を決め、内蔵と zxing を並べて走らせ、結果を揃える (normalize.ts)。
+// 読み取りの中心: 読む種類と方式から振り分け (engines.ts) を決め、内蔵と zxing を並べて走らせ、結果を揃える。
 // ブラウザの部品 (BarcodeDetector・Worker) は外から渡す (browser.ts)。テストでは偽物を渡す。
 
 import { FORMAT_INFO, type Fmt } from '../formats';
-import { toCodes } from './normalize';
-import { planEngines, type EngineMode, type EnginePlan } from './plan';
-import type { Code, FrameSources, RawCode } from './types';
-import type { ZxingConfig } from './zxing-protocol';
+import { planEngines, toCodes, type EngineMode, type EnginePlan } from './engines';
+import type { Code, FrameSources, RawCode, ZxingOptions } from './types';
+
+/**
+ * zxing の読み取りの指定 (速さの調整)。設定の画面に出ない細かい値はここで変える。
+ * @param tryHarder 念入りに探す (設定の「念入りに探す」): 回転・白黒反転したコードも探す。遅くなる
+ */
+export const zxingOptions = (formats: readonly Fmt[], tryHarder: boolean): ZxingOptions => ({
+  formats: formats.map((f) => FORMAT_INFO[f].zxing),
+  tryHarder,
+  tryRotate: tryHarder,
+  tryInvert: tryHarder,
+  tryDownscale: true, // 大きい画像は、縮めた画像でも探す
+  maxNumberOfSymbols: 8, // 1 回に読むコードの数の上限
+});
 
 /** 内蔵の読み取り (BarcodeDetector を包んだもの) */
 export interface Detector {
@@ -13,7 +24,7 @@ export interface Detector {
 }
 /** zxing の読み取り (Worker を包んだもの) */
 export interface ZxingReader {
-  configure(config: ZxingConfig): Promise<void>;
+  configure(options: ZxingOptions): Promise<void>;
   read(image: ImageData): Promise<RawCode[]>;
 }
 export interface ScannerDeps {
@@ -57,7 +68,7 @@ export class Scanner {
     const plan = planEngines(want, await this.deps.supportedFormats(), mode);
     const detector = plan.detectorFormats.length ? this.deps.createDetector(plan.detectorFormats) : null;
     const zxing = plan.zxing.length ? (this.zxing ??= this.deps.createZxing()) : null;
-    if (zxing) await zxing.configure({ formats: plan.zxing.map((f) => FORMAT_INFO[f].zxing), tryHarder });
+    if (zxing) await zxing.configure(zxingOptions(plan.zxing, tryHarder));
     if (generation !== this.generation) return null;
     this.active = { want: [...want], plan, detector, zxing };
     return plan;

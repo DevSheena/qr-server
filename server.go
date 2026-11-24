@@ -3,7 +3,8 @@ package main
 // 要求の受け方: /api/ の下は API、それ以外は画面のファイル。どの返事にも安全のためのヘッダを付け、要求ごとに 1 行ログを書く。
 //
 // API を足す時: newHandler の「API」の所に mux.HandleFunc を 1 行足し、ハンドラを下の「API」の節に書く
-// (返事は writeJSON / writeError で書く)。
+// (返事は writeJSON / writeError で書く)。API が増えてこのファイルが長くなったら、「API」の節を api.go に移す。
+// 方法 (GET・POST) が合わない要求は、/api/ の受け皿に落ちるので 405 ではなく 404 になる。
 
 import (
 	"crypto/sha256"

@@ -1,4 +1,4 @@
-// 座標の計算 (純粋関数)。点は [x, y]。単位 (カメラ映像の画素・画面の画素) は使う側で決まる。
+// 座標と数の小さな計算 (純粋関数)。点は [x, y]。単位 (カメラ映像の画素・画面の画素) は使う側で決まる。
 
 export type Pt = [number, number];
 export interface Size {
@@ -11,6 +11,12 @@ export interface Rect {
   w: number;
   h: number;
 }
+
+/** x を lo〜hi に収める */
+export const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+/** 測り値をならす: 前の値 prev に、新しい値 x を割合 k だけ混ぜる */
+export const smooth = (prev: number, x: number, k = 0.2) => prev + (x - prev) * k;
 
 /** p + v × k */
 export const addScaled = (p: Pt, v: Pt, k: number): Pt => [p[0] + v[0] * k, p[1] + v[1] * k];

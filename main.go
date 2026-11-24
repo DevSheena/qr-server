@@ -33,7 +33,7 @@ import (
 //go:embed web
 var webFiles embed.FS
 
-// version は版。bin/build.sh (Docker) は -ldflags "-X main.version=..." で入れる。
+// version は版。mac-docker/dev.sh (この Mac の Docker。git が無い) は -ldflags "-X main.version=..." で入れる。
 // 空なら、go build が記録した git のコミットを使う (appVersion)。
 var version string
 
@@ -59,17 +59,34 @@ func main() {
 	}
 }
 
-func run(o options, log *slog.Logger) error {
+// validate は、一緒に使えない起動オプションを見つける。
+func (o options) validate() error {
 	if (o.cert == "") != (o.key == "") {
 		return errors.New("-cert と -key は両方指定する")
 	}
 	if o.plainHTTP && o.cert != "" {
 		return errors.New("-http と -cert は一緒に使えない")
 	}
-	addr := o.addr
-	if addr == "" {
-		addr = map[bool]string{false: ":8443", true: ":8080"}[o.plainHTTP]
+	return nil
+}
+
+// listenAddr は待ち受けるアドレス。指定が無ければ、HTTPS は :8443、HTTP は :8080。
+func (o options) listenAddr() string {
+	switch {
+	case o.addr != "":
+		return o.addr
+	case o.plainHTTP:
+		return ":8080"
+	default:
+		return ":8443"
 	}
+}
+
+func run(o options, log *slog.Logger) error {
+	if err := o.validate(); err != nil {
+		return err
+	}
+	addr := o.listenAddr()
 	site, err := siteFS()
 	if err != nil {
 		return err
@@ -151,7 +168,10 @@ func openURLs(addr string, https bool) []string {
 	if err != nil {
 		return nil
 	}
-	scheme := map[bool]string{false: "http", true: "https"}[https]
+	scheme := "http"
+	if https {
+		scheme = "https"
+	}
 	hosts := []string{host}
 	if host == "" { // すべての IP アドレスで待つ時
 		hosts = []string{"localhost"}

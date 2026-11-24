@@ -3,7 +3,7 @@
 
 import { el, openLink, replayAnimation } from './dom';
 import type { HistoryEntry, Recorded } from './history';
-import { isUrl, metaText } from './text';
+import { LABEL, isUrl, metaText } from './text';
 
 export type CopyFn = (text: string) => Promise<void>;
 
@@ -16,10 +16,10 @@ export function bindCopy(btn: HTMLButtonElement, getText: () => string | null, c
     const text = getText();
     if (text === null) return;
     btn.textContent = await copy(text).then(
-      () => 'コピーした',
-      () => 'できない',
+      () => LABEL.copied,
+      () => LABEL.copyFailed,
     );
-    setTimeout(() => (btn.textContent = 'コピー'), 1500);
+    setTimeout(() => (btn.textContent = LABEL.copy), 1500);
   });
 }
 
@@ -53,10 +53,10 @@ export class HistoryList {
 
   private createItem(entry: HistoryEntry) {
     const { text } = entry.code;
-    const copyBtn = el('button', { className: 'tool small', text: 'コピー' });
+    const copyBtn = el('button', { className: 'tool small', text: LABEL.copy });
     bindCopy(copyBtn, () => text, this.copy);
     const meta = el('div', { className: 'meta' });
-    const acts = el('div', { className: 'acts' }, [copyBtn, ...(isUrl(text) ? [openLink(text)] : [])]);
+    const acts = el('div', { className: 'acts' }, [copyBtn, ...(isUrl(text) ? [openLink(text, LABEL.open)] : [])]);
     return { li: el('li', {}, [el('div', { className: 'text', text }), meta, acts]), meta };
   }
 }

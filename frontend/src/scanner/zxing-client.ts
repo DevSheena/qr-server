@@ -1,7 +1,6 @@
 // zxing の Worker とのやりとり。要求ごとに番号を付け、返事をその要求の Promise に返す。
 
-import type { FromWorker, ToWorker, ZxingConfig } from './zxing-protocol';
-import type { RawCode } from './types';
+import type { FromWorker, RawCode, ToWorker, ZxingOptions } from './types';
 
 /** Worker のうち、ここで使う部分 (テストでは偽物を渡す) */
 export interface WorkerPort {
@@ -23,8 +22,8 @@ export class ZxingClient {
     port.onerror = (e) => this.failAll(new Error(`zxing の Worker が落ちた: ${e.message}`));
   }
 
-  async configure(config: ZxingConfig): Promise<void> {
-    await this.request({ type: 'config', config }, 'ready');
+  async configure(options: ZxingOptions): Promise<void> {
+    await this.request({ type: 'config', options }, 'ready');
   }
 
   /** 読む。画像のメモリは Worker に渡す (コピーしない) ので、呼んだ後の image は使えない */

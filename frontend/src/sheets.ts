@@ -1,36 +1,31 @@
 // 設定・履歴のシート (カメラの上に重ねて出す。縦長では下から、横長では右から)。同時に開くのは 1 つだけ。
+//
+// つなぎは index.html だけに書く (ここは HTML から組み立てる):
+//   シート          … <aside id="..." class="sheet" hidden>
+//   開け閉めのボタン … aria-controls="<シートの id>"
+//   閉じるボタン     … data-close (シートの中に置く)
 
-export interface Sheet {
-  el: HTMLElement;
-  /** 開け閉めするボタン */
-  button: HTMLButtonElement;
-}
-
-export class Sheets<K extends string> {
-  private openKey: K | null = null;
+export class Sheets {
+  private readonly sheets: { el: HTMLElement; button: HTMLButtonElement }[];
 
   /** onChange は開いているシートが変わった時に呼ぶ (null = どれも開いていない) */
   constructor(
-    private readonly sheets: Record<K, Sheet>,
-    private readonly onChange: (open: K | null) => void,
+    root: ParentNode,
+    private readonly onChange: (open: HTMLElement | null) => void,
   ) {
-    for (const key of this.keys()) sheets[key].button.addEventListener('click', () => this.toggle(key));
+    this.sheets = [...root.querySelectorAll<HTMLButtonElement>('button[aria-controls]')].flatMap((button) => {
+      const el = document.getElementById(button.getAttribute('aria-controls') ?? '');
+      return el?.classList.contains('sheet') ? [{ el, button }] : [];
+    });
+    for (const s of this.sheets) s.button.addEventListener('click', () => this.show(s.el.hidden ? s.el : null));
+    root.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => this.show(null)));
   }
 
-  toggle(key: K) {
-    this.show(this.openKey === key ? null : key);
-  }
-
-  show(key: K | null) {
-    this.openKey = key;
-    for (const k of this.keys()) {
-      this.sheets[k].el.hidden = k !== key;
-      this.sheets[k].button.setAttribute('aria-expanded', String(k === key));
+  show(sheet: HTMLElement | null) {
+    for (const s of this.sheets) {
+      s.el.hidden = s.el !== sheet;
+      s.button.setAttribute('aria-expanded', String(s.el === sheet));
     }
-    this.onChange(key);
-  }
-
-  private keys() {
-    return Object.keys(this.sheets) as K[];
+    this.onChange(sheet);
   }
 }

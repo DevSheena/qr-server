@@ -1,11 +1,13 @@
 // 設定。画面の「設定」に出す項目は、下の SETTINGS の表に 1 行ずつ書く。
 // 表に書けば、既定値・保存と読み込み・設定の画面 (settings-view.ts) に、そのまま反映される。
-// 変わった時の動き (カメラを開き直すなど) は main.ts の store.subscribe に書く。
+//   ある設定を変えた時に、ほかの設定も合わせて変える決まり → 下の RULES
+//   設定が変わった時の動き (カメラを開き直すなど)         → main.ts の store.subscribe
 //
-// 読む種類 (formats・preset) だけは画面が特別なので、表の外に置く (種類そのものは formats.ts)。
+// 読む種類 (formats) だけは画面が特別なので、表の外に置く (種類そのものとプリセットは formats.ts)。
+// プリセットは保存せず、画面に出す時に読む種類から求める (presetFor)。
 
-import { DEFAULT_PRESET_ID, PRESETS, isFmt, presetFor, type Fmt } from './formats';
-import type { EngineMode } from './scanner/plan';
+import { DEFAULT_PRESET_ID, PRESETS, isFmt, type Fmt } from './formats';
+import type { EngineMode } from './scanner/engines';
 
 /** 選択肢: [値, 表示] */
 export type Choice<T> = readonly [value: T, label: string];
@@ -112,22 +114,13 @@ export const SETTINGS = {
 
 // ---------- 型と既定値 (表から作る) ----------
 type Defs = typeof SETTINGS;
-export type SettingKey = keyof Defs | 'preset' | 'formats';
+export type SettingKey = keyof Defs | 'formats';
 type ValueOf<D> = D extends SelectDef<infer T> ? T : D extends CheckDef ? boolean : never;
 
-export type Settings = Readonly<
-  { [K in keyof Defs]: ValueOf<Defs[K]> } & {
-    /** PRESETS の id か CUSTOM_PRESET */
-    preset: string;
-    formats: readonly Fmt[];
-  }
->;
-
-export const CUSTOM_PRESET = 'custom';
+export type Settings = Readonly<{ [K in keyof Defs]: ValueOf<Defs[K]> } & { formats: readonly Fmt[] }>;
 
 export const DEFAULTS: Settings = {
   ...(Object.fromEntries(Object.entries(SETTINGS).map(([k, d]) => [k, d.default])) as { [K in keyof Defs]: ValueOf<Defs[K]> }),
-  preset: DEFAULT_PRESET_ID,
   formats: PRESETS.find((p) => p.id === DEFAULT_PRESET_ID)!.formats,
 };
 
@@ -151,24 +144,22 @@ export function parseSettings(raw: string | null): Settings {
   }
   const out: Record<string, unknown> = { ...DEFAULTS };
   for (const [key, def] of Object.entries(SETTINGS)) if (accepts(def, saved[key])) out[key] = saved[key];
-  if (typeof saved.preset === 'string') out.preset = saved.preset;
   if (Array.isArray(saved.formats)) out.formats = saved.formats.filter(isFmt);
   return out as Settings;
 }
 
-// ---------- 決まりごと (純粋関数) ----------
+// ---------- 決まりごと (ある設定を変えた時に、ほかの設定も合わせて変える) ----------
+// 設定を変える時は必ず applyRules を通る (SettingsStore.update)。画面の部品は、変えた設定だけを渡せばよい。
+// 決まりを足す時は RULES に 1 行足す: 変える内容 (patch) を受け取り、合わせて変える内容を返す。
 
-/** プリセットを選ぶ: 読む種類もそのプリセットにする */
-export function withPreset(id: string): Partial<Settings> {
-  const p = PRESETS.find((x) => x.id === id);
-  return p ? { preset: id, formats: p.formats } : { preset: id };
-}
+type Rule = (patch: Partial<Settings>) => Partial<Settings>;
+const RULES: readonly Rule[] = [
+  // カメラを選んだ時の左右反転: 前面は鏡のように見えた方が自然なので反転、背面は反転なし、個別のカメラは変えない
+  ({ camera, mirror }) => ((camera === 'user' || camera === 'environment') && mirror === undefined ? { mirror: camera === 'user' } : {}),
+];
 
-/** 読む種類を選ぶ: 同じ組み合わせのプリセットがあればそれ、無ければ「自分で選ぶ」にする */
-export const withFormats = (formats: readonly Fmt[]): Partial<Settings> => ({ formats, preset: presetFor(formats)?.id ?? CUSTOM_PRESET });
-
-/** カメラを選んだ時の左右反転: 前面は鏡のように見えた方が自然なので反転、背面は反転なし、個別のカメラは変えない */
-export const mirrorFor = (camera: string): Partial<Settings> => (camera === 'user' || camera === 'environment' ? { mirror: camera === 'user' } : {});
+/** patch に、決まりで合わせて変わる設定を足す */
+export const applyRules = (patch: Partial<Settings>): Partial<Settings> => RULES.reduce((p, rule) => ({ ...p, ...rule(p) }), patch);
 
 const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, i) => x === b[i]) : a === b);
 const KEYS = Object.keys(DEFAULTS) as SettingKey[];
@@ -217,9 +208,9 @@ export class SettingsStore {
     return this.current;
   }
 
-  /** 変える。本当に変わった時だけ保存して知らせる */
+  /** 変える (決まりで合わせて変わる設定も一緒に)。本当に変わった時だけ保存して知らせる */
   update(patch: Partial<Settings>) {
-    const next: Settings = { ...this.current, ...patch };
+    const next: Settings = { ...this.current, ...applyRules(patch) };
     const changed = changedKeys(this.current, next);
     if (!changed.size) return;
     this.current = next;

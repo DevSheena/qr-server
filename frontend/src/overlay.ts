@@ -18,6 +18,7 @@ export interface OverlayScene {
   boxes: readonly OverlayBox[];
 }
 
+// 色は style.css の --accent (枠) と --warn (読む範囲) と同じにしておく (canvas には CSS の変数が届かないので、ここにも書く)
 const COLOR = {
   box: '#22ff88',
   roi: '#ffd400',

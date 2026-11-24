@@ -21,7 +21,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /** 別のタブで開くリンク (開いた先に、このページを触らせない) */
-export function openLink(url: string, text = '開く'): HTMLAnchorElement {
+export function openLink(url: string, text: string): HTMLAnchorElement {
   const a = el('a', { className: 'tool small link', text });
   a.href = url;
   a.target = '_blank';

@@ -5,8 +5,7 @@
 // 先読み: 同じコードの続けての結果から四隅の速さを求め、毎回の描画で「解析した画面の時刻から今まで」の分だけ先へ進めて描く。
 //   先へ進める最大の時間は「画面から結果が出るまで + 結果の間隔」(その端末で測った値)。それより先へは進めない (止めた時に行き過ぎないように)。
 
-import { addScaled, diffPer, lerpPt, type Pt } from './geometry';
-import { clamp, smooth } from './math';
+import { addScaled, clamp, diffPer, lerpPt, smooth, type Pt } from './geometry';
 import { codeKey, type Code } from './scanner/types';
 
 export const TRACKING = {

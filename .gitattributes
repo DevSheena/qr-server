@@ -1,0 +1,3 @@
+# 改行を LF に揃える (Windows で開発しても、差分が改行の違いで汚れないように)
+* text=auto eol=lf
+*.wasm binary

@@ -1,7 +1,7 @@
 // 読み取りの繰り返し: 映像の新しい画面ごとに (使えなければ描画ごとに) 1 回読む。
 // 前の解析が終わるまで次は読まない (溜めない)。頻度の上限があれば間を空ける。
 
-import { smooth } from './math';
+import { smooth } from './geometry';
 
 /** 次の解析を始めてよいか。hz = 1 秒あたりの上限 (0 = 上限なし) */
 export const shouldStart = (now: number, lastStart: number, hz: number) => hz <= 0 || now - lastStart >= 1000 / hz;

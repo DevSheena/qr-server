@@ -1,8 +1,9 @@
 # qr-server — QR・バーコードリーダー (Go のサーバー版)
 
 ブラウザで動く QR・バーコードリーダーの画面と API を、**実行ファイル 1 つ**で配るサーバー。
-画面のファイルは実行ファイルに埋め込んであり、HTTPS の証明書も初回の起動で自動で作るので、LAN の PC に実行ファイルを置いて起動すれば、
-同じネットワークのスマホや PC のブラウザから使える。Linux・Windows・Mac のどれでも同じ手順で作れる (Docker は要らない)。
+画面のファイルは実行ファイルに埋め込んであり、HTTPS の証明書も初回の起動で自動で作るので、
+LAN の PC に実行ファイルを置いて起動すれば、同じネットワークのスマホや PC のブラウザから使える。
+Linux・Windows・Mac のどれでも、Node.js と Go だけで作れる (Docker は要らない)。
 
 ## すぐ試す
 
@@ -18,17 +19,17 @@ go build
 ```
 
 ブラウザで https://localhost:8443/ を開く (Windows の PowerShell では最後を `.\qr-server.exe`)。
-HTTPS の証明書は初回の起動で自動で作るので、初回だけブラウザが警告を出す (「詳細」などから進む)。
+初回だけブラウザが証明書の警告を出すので、「詳細」などから進む。
 同じネットワークのスマホからは、起動した時にログに出る URL (`https://<この PC の IP>:8443/`) で開く。
-警告の理由・ファイアウォール・IP アドレスは [環境と HTTPS](docs/environment.md)。
 
 ## 文書
 
 | 知りたいこと | 文書 |
 |---|---|
-| どう動いているか (構成・仕組み・ファイルの役割・使っているもの) | [アーキテクチャ](docs/architecture.md) |
-| 機能を足してデプロイするまで (開発のくり返し・コマンドとその意味・例・初回と 2 回目以降のデプロイ・止まる時・うまくいかない時) | [パイプライン](docs/pipeline.md) |
-| OS ごとの注意・WSL・ファイアウォール・IP アドレス・`https://` を付ける理由・HTTPS の証明書と警告 | [環境と HTTPS](docs/environment.md) |
+| どう動いているか (全体の形・ファイルの役割・サーバーと画面の仕組み・使っているもの・変えない方がよい作り) | [アーキテクチャ](docs/architecture.md) |
+| 機能を足す・直す (準備・くり返しの手順・コマンドの意味・例・テスト) | [機能を足す](docs/extending.md) |
+| LAN の PC に置いて動かす (初回と更新・OS ごとの注意・ファイアウォール・IP アドレス・HTTPS の証明書と警告) | [デプロイ](docs/deploy.md) |
+| この Mac で動かす (Docker を使う決まりがある Mac だけ) | [mac-docker](mac-docker/README.md) |
 
 ## どこを直すか (早見表)
 
@@ -37,40 +38,33 @@ HTTPS の証明書は初回の起動で自動で作るので、初回だけブ�
 | 読む種類を足す・外す・名前を変える | `frontend/src/formats.ts` の `FORMAT_INFO` (1 種類 1 行) |
 | 読む種類の組み合わせ (プリセット) | `frontend/src/formats.ts` の `PRESETS` |
 | 設定を足す・選択肢や既定値を変える (速さの調整も) | `frontend/src/settings.ts` の `SETTINGS` (1 設定 1 項目。画面・保存は自動) |
-| 設定が変わった時の動き | `frontend/src/main.ts` の `store.subscribe` |
-| 画面に出る文字 | `frontend/src/text.ts` |
-| 見た目 (CSS) | `frontend/src/style.css` |
+| ある設定を変えた時に、ほかの設定も合わせて変える | `frontend/src/settings.ts` の `RULES` |
+| 設定が変わった時の動き (カメラを開き直すなど) | `frontend/src/main.ts` の `store.subscribe` |
+| zxing の細かい読み取りの指定 | `frontend/src/scanner/scanner.ts` の `zxingOptions` |
+| 画面に出る文字 | `frontend/src/text.ts` (初めに出るボタンの名前は `index.html`、設定の項目は `settings.ts`) |
+| 見た目 | `frontend/src/style.css` |
+| 設定・履歴のようなシートを足す | `frontend/index.html` だけ |
 | API を足す | `server.go` の `newHandler` と「API」の節 |
-| 起動オプションを足す | `main.go` の `main` |
 
-手順の例は [パイプライン](docs/pipeline.md) の「例」。
+手順と例は [機能を足す](docs/extending.md)。
 
 ## 構成
 
 ```
 qr-server/
-├─ main.go          起動 (起動オプション・画面の埋め込み・版)
-├─ server.go        要求の受け方 (API・画面の配信・安全のためのヘッダ・ログ)
-├─ cert.go          HTTPS の証明書 (初回の起動で自動で作り、次からは使い回す)
-├─ *_test.go        テスト
-├─ go.mod           外部の依存なし (標準ライブラリだけ)
-├─ frontend/        画面のソース (Vite + TypeScript)。npm run build で ../web/ に出る
-├─ web/             ブラウザに配るファイル (ビルドで作る。git に入れない)
-├─ docs/            文書
-├─ bin/・Dockerfile  この Mac 専用 (Docker で動かす決まりがあるため。ほかの PC では使わない)
-├─ README.md        この索引
-│
-│  (以下はビルドや起動でできる。git に入れない)
-├─ web/                     画面のビルド結果 (go build が埋め込む)
-├─ frontend/node_modules/   画面の依存 (npm ci で入る)
-├─ build/                   この Mac の Docker 用の実行ファイル
-├─ qr-server (.exe)         実行ファイル (go build でできる)
-└─ qr-server.crt・.key      HTTPS の証明書と秘密鍵 (初回の起動で、実行ファイルの隣にできる。秘密鍵は人に渡さない)
+├─ main.go・server.go・cert.go   サーバー (Go。標準ライブラリだけ)。テストは *_test.go
+├─ go.mod
+├─ frontend/       画面 (Vite + TypeScript)。npm run build で ../web/ に出る
+├─ docs/           文書
+├─ mac-docker/     この Mac 専用の手順 (ほかの PC では使わない)
+└─ README.md       この索引
+   (ビルドや起動でできるもの: web/・frontend/node_modules/・build/・qr-server(.exe)・qr-server.crt・qr-server.key。git に入れない)
 ```
 
-## 今の状態 (2026-11-24)
+ファイルごとの役割は [アーキテクチャ](docs/architecture.md) の「ファイルの役割」。
 
-- 確かめたこと: この Mac で、偽のカメラによる読み取り・設定・履歴、HTTPS (証明書を初回に作り、2 回目の起動で使い回す)、3 つの OS 向けの実行ファイルができること
+## 今の状態
+
+- 確かめたこと: この Mac で、偽のカメラによる読み取り・設定・履歴・シート、カメラの開き直しの重なり、HTTPS と証明書の自動作成、3 つの OS 向けのビルド
 - まだ確かめていないこと: Windows・Linux の実機での起動とファイアウォール、本物のスマホとカメラ、端末に証明書を「信頼する」と登録する手順
 - git: この PC の中だけ (リモートのリポジトリには送っていない)
-- 詳しくは [アーキテクチャ](docs/architecture.md) の「確かめたこと」

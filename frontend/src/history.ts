@@ -14,8 +14,6 @@ export interface HistoryEntry {
 }
 export interface Recorded {
   entry: HistoryEntry;
-  /** 初めて読んだコードか */
-  isNew: boolean;
   /** 知らせるか (初めて、または前に読んでから REPEAT_MS より空いた) */
   fresh: boolean;
 }
@@ -28,7 +26,7 @@ export class History {
     const old = this.entries.get(key);
     const entry: HistoryEntry = { key, code, count: (old?.count ?? 0) + 1, last: now };
     this.entries.set(key, entry);
-    return { entry, isNew: !old, fresh: !old || now - old.last > REPEAT_MS };
+    return { entry, fresh: !old || now - old.last > REPEAT_MS };
   }
 
   clear() {

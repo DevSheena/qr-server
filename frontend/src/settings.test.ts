@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOM_PRESET, DEFAULTS, SettingsStore, changedKeys, parseSettings, mirrorFor, withFormats, withPreset, type KeyValueStorage } from './settings';
+import { DEFAULTS, SettingsStore, applyRules, changedKeys, parseSettings, type KeyValueStorage } from './settings';
 
 describe('parseSettings', () => {
   it('無い・壊れた JSON は既定', () => {
@@ -7,8 +7,9 @@ describe('parseSettings', () => {
     expect(parseSettings('{oops')).toEqual(DEFAULTS);
     expect(parseSettings('[1,2]')).toEqual({ ...DEFAULTS });
   });
-  it('型の合わない値・知らない方式・知らない種類は捨てる', () => {
-    const s = parseSettings(JSON.stringify({ roi: '0.6', mode: 'magic', formats: ['qr_code', 'nope'], mirror: true, extra: 1 }));
+  it('型の合わない値・知らない方式・知らない種類・前の版の preset は捨てる', () => {
+    const s = parseSettings(JSON.stringify({ roi: '0.6', mode: 'magic', formats: ['qr_code', 'nope'], mirror: true, extra: 1, preset: 'qr' }));
+    expect('preset' in s).toBe(false);
     expect(s.roi).toBe(DEFAULTS.roi);
     expect(s.mode).toBe(DEFAULTS.mode);
     expect(s.formats).toEqual(['qr_code']);
@@ -23,18 +24,15 @@ describe('parseSettings', () => {
   });
 });
 
-describe('決まりごと', () => {
-  it('プリセットを選ぶと読む種類も変わる', () => {
-    expect(withPreset('qr')).toEqual({ preset: 'qr', formats: ['qr_code'] });
-  });
-  it('読む種類がどのプリセットとも違えば「自分で選ぶ」', () => {
-    expect(withFormats(['qr_code']).preset).toBe('qr');
-    expect(withFormats(['qr_code', 'codabar']).preset).toBe(CUSTOM_PRESET);
-  });
+describe('決まりごと (applyRules)', () => {
   it('前面カメラは左右反転、背面は反転なし、個別のカメラは反転を変えない', () => {
-    expect(mirrorFor('user')).toEqual({ mirror: true });
-    expect(mirrorFor('environment')).toEqual({ mirror: false });
-    expect(mirrorFor('abc')).toEqual({});
+    expect(applyRules({ camera: 'user' })).toEqual({ camera: 'user', mirror: true });
+    expect(applyRules({ camera: 'environment' })).toEqual({ camera: 'environment', mirror: false });
+    expect(applyRules({ camera: 'abc' })).toEqual({ camera: 'abc' });
+  });
+  it('一緒に指定した値は上書きしない。関係ない設定には何もしない', () => {
+    expect(applyRules({ camera: 'user', mirror: false })).toEqual({ camera: 'user', mirror: false });
+    expect(applyRules({ roi: 0.6 })).toEqual({ roi: 0.6 });
   });
   it('changedKeys は配列を中身で比べる', () => {
     expect([...changedKeys(DEFAULTS, { ...DEFAULTS, formats: [...DEFAULTS.formats] })]).toEqual([]);
@@ -57,6 +55,13 @@ describe('SettingsStore', () => {
     expect(calls).toEqual([['roi']]);
     expect(JSON.parse(storage.data.k).roi).toBe(0.6);
     expect(new SettingsStore(storage, 'k').value.roi).toBe(0.6);
+  });
+  it('決まりで合わせて変わった設定も、1 回の知らせにまとめる', () => {
+    const store = new SettingsStore(null);
+    const calls: string[][] = [];
+    store.subscribe((s, changed) => calls.push([...changed].sort(), [String(s.mirror)]));
+    store.update({ camera: 'user' });
+    expect(calls).toEqual([['camera', 'mirror'], ['true']]);
   });
   it('保存先が使えなくても動く', () => {
     const broken: KeyValueStorage = {

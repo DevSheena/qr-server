@@ -1,15 +1,15 @@
-// 画面に出す文字を作る (純粋関数)。言い回しを変える時はここを直す。
+// 画面に出す文字を作る・まとめる所。言い回しを変える時はここを直す (設定の項目の名前と説明は settings.ts、初めに出るボタンの名前は index.html)。
 
 import { FORMAT_INFO, formatNames } from './formats';
 import type { Size } from './geometry';
-import type { EnginePlan } from './scanner/plan';
+import type { EnginePlan } from './scanner/engines';
 import type { Code, Engine } from './scanner/types';
 
-export const ENGINE_LABEL: Record<Engine, string> = { native: '内蔵', zxing: 'zxing' };
+const ENGINE_LABEL: Record<Engine, string> = { native: '内蔵', zxing: 'zxing' };
 
 export const isUrl = (text: string) => /^https?:\/\/\S+$/i.test(text);
 
-export const truncate = (text: string, max: number) => (text.length > max ? text.slice(0, max) + '…' : text);
+const truncate = (text: string, max: number) => (text.length > max ? text.slice(0, max) + '…' : text);
 
 /** 枠の上に出す名札 */
 export const codeLabel = (c: Code) => `${FORMAT_INFO[c.format].label}: ${truncate(c.text, 32)}`;
@@ -62,3 +62,26 @@ export function cameraErrorText(e: unknown): string {
   };
   return MESSAGES[(e as { name?: string } | null)?.name ?? ''] ?? String(e);
 }
+
+/** 画面の下などに出すお知らせ */
+export const MSG = {
+  noCameraHere: 'この画面ではカメラを使えません。https:// で開いてください',
+  cameraFailed: (e: unknown) => `カメラを開けません: ${cameraErrorText(e)}`,
+  scannerFailed: (e: unknown) => `読み取りの準備に失敗: ${e}`,
+  torchFailed: (e: unknown) => `ライトを切り替えられません: ${e}`,
+  paused: '読み取りました。画面をタップすると続けます',
+};
+
+/** ボタンなどの名前 (初めに出る名前は index.html に書いてある。ここは画面が書き換える時の名前) */
+export const LABEL = {
+  start: '開始',
+  stop: '停止',
+  copy: 'コピー',
+  copied: 'コピーした',
+  copyFailed: 'できない',
+  open: '開く',
+  formatsRow: '読む種類',
+  customPreset: '自分で選ぶ',
+  camera: (n: number) => `カメラ ${n}`,
+  noNative: 'この環境にはブラウザ内蔵の読み取り (BarcodeDetector) が無いので、zxing-wasm で読む',
+};
