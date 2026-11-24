@@ -1,0 +1,14 @@
+# macOS が exFAT に作る隠しファイル
+._*
+.DS_Store
+
+# ビルドで作るもの (bin/build.sh で作り直せる)
+# web/ は frontend/ のビルド結果 (ブラウザに配るファイル)。Go の実行ファイルに埋め込む
+/web/
+/build/
+
+# 画面の依存 (Docker の名前付きボリュームに置く。ここにあるのはマウント先の空のフォルダ)
+frontend/node_modules/
+frontend/.installed
+# ビルドの前に作るもの (frontend/scripts/prepare.mjs で作り直せる)
+frontend/public/third-party-licenses.txt

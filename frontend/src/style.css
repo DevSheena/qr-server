@@ -1,0 +1,468 @@
+/* QR・バーコードリーダー。画面いっぱいに収め、ページ全体はスクロールしない。設定は上に重ねて出す */
+:root {
+  --bg: #000;
+  --panel: rgba(18, 21, 26, 0.94);
+  --text: #e8ebef;
+  --muted: #9aa3ad;
+  --accent: #22ff88;
+  --warn: #ffd400;
+  --err: #ff6b6b;
+  --line: rgba(255, 255, 255, 0.14);
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+button,
+select {
+  font: inherit;
+  color: var(--text);
+}
+select {
+  width: 100%;
+  background: #232831;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+/* 縦長: 上にカメラ (6 割)、下に 3D の図を 2 つ並べる / 横長: 左にカメラ、右に図を縦に 2 つ */
+.app {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: minmax(0, 62fr) minmax(0, 38fr);
+}
+@media (orientation: landscape) and (min-width: 640px) {
+  .app {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 30vw);
+  }
+  .views {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.cam {
+  position: relative;
+  min-height: 0;
+  background: #000;
+  overflow: hidden;
+}
+.cam video,
+.cam canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.cam video.mirror {
+  transform: scaleX(-1);
+}
+.chip {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: 8px;
+  right: 8px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #cfd5dc;
+}
+.msg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  max-width: 86%;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  text-align: center;
+  pointer-events: none;
+}
+.msg:empty {
+  display: none;
+}
+.msg.err {
+  color: var(--err);
+}
+.start-big {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px 28px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #062113;
+  font-size: 17px;
+  font-weight: 700;
+}
+.start-big[hidden] {
+  display: none;
+}
+
+/* カメラの下側に浮かぶ操作ボタン */
+.toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+.tool {
+  min-height: 44px;
+  min-width: 56px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(40, 45, 54, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tool:active {
+  transform: scale(0.96);
+}
+.toggle .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #59616c;
+}
+.toggle[aria-pressed='true'] {
+  background: rgba(34, 255, 136, 0.18);
+  border-color: var(--accent);
+}
+.toggle[aria-pressed='true'] .dot {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+}
+/* 読み込み中: 点が回り、押しても反応しない */
+.toggle[aria-busy='true'] {
+  opacity: 0.75;
+  pointer-events: none;
+}
+.toggle[aria-busy='true'] .dot {
+  background: transparent;
+  border: 2px solid var(--warn);
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.views {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+  padding: 4px;
+  min-height: 0;
+  background: #07080a;
+}
+.views figure {
+  position: relative;
+  margin: 0;
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0b0d10;
+}
+.views canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.views figcaption {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--muted);
+}
+
+/* 設定: 縦長では下から出るパネル (カメラは上に見えたまま)、横長では右から出るパネル */
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 55dvh;
+  max-height: 55vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  z-index: 20;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@supports (height: 1dvh) {
+  .sheet {
+    max-height: 55dvh;
+  }
+}
+.sheet[hidden] {
+  display: none;
+}
+@media (orientation: landscape) and (min-width: 640px) {
+  .sheet {
+    top: 0;
+    left: auto;
+    width: min(380px, 42vw);
+    max-height: none;
+    border-radius: 0;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
+.sheet header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.sheet h2 {
+  font-size: 15px;
+  margin: 0;
+}
+.sheet-body {
+  overflow-y: auto;
+  padding: 4px 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet footer {
+  padding: 8px 14px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+.sheet footer p {
+  margin: 0 0 4px;
+}
+.sheet footer a {
+  color: var(--muted);
+}
+.row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.row:last-child {
+  border-bottom: 0;
+}
+.row > label:first-child {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.row .note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.row .check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.row .check input {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---- QR リーダー用: カメラは画面いっぱい (切り取って埋める) ---- */
+.app {
+  grid-template-rows: minmax(0, 1fr) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.cam video {
+  object-fit: cover;
+}
+.muted {
+  color: var(--muted);
+}
+.badge {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #3a414c;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+.tool[aria-pressed='true'] {
+  background: var(--warn);
+  color: #1d1700;
+}
+.tool.small {
+  min-height: 36px;
+  min-width: 0;
+  padding: 0 12px;
+  font-size: 14px;
+}
+.tool.link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.tool.link[hidden] {
+  display: none;
+}
+.spacer {
+  flex: 1;
+}
+.sheet header {
+  gap: 8px;
+}
+
+/* 最後に読んだ内容: 操作ボタンの上に重ねる */
+.latest {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 66px);
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 20px));
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border-left: 4px solid var(--accent);
+  background: rgba(14, 17, 21, 0.88);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 4;
+}
+.latest[hidden] {
+  display: none;
+}
+.latest.new {
+  animation: flash 0.6s ease-out;
+}
+@keyframes flash {
+  from {
+    background: rgba(31, 77, 54, 0.95);
+  }
+}
+.latest-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.latest-text {
+  grid-column: 1;
+  font-size: 16px;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.latest-acts {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* 履歴 */
+#list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+#list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+#list .text {
+  word-break: break-all;
+}
+#list .meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+#list .acts {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 読む種類のチェック */
+.fmts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+.fmts label {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 14px;
+}
+.fmts input {
+  width: 18px;
+  height: 18px;
+}
+.row .note.warn {
+  color: var(--warn);
+}
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* hidden 属性を、ボタンなどの display の指定より優先する */
+[hidden] {
+  display: none !important;
+}

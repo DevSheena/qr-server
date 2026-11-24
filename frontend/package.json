@@ -1,0 +1,19 @@
+{
+  "name": "qr-server-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/prepare.mjs && tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zxing-wasm": "3.1.6"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.0",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}

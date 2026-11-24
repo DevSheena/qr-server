@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <title>QR・バーコードリーダー</title>
+  </head>
+  <body>
+    <div class="app">
+      <section id="stage" class="cam">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div id="status" class="chip mono" hidden></div>
+        <button id="startBig" class="start-big">カメラを開始</button>
+        <p id="msg" class="msg"></p>
+
+        <div id="latest" class="latest" hidden>
+          <div class="latest-meta" id="latestMeta"></div>
+          <div class="latest-text" id="latestText"></div>
+          <div class="latest-acts">
+            <button id="latestCopy" class="tool small">コピー</button>
+            <a id="latestOpen" class="tool small link" target="_blank" rel="noopener noreferrer" hidden>開く</a>
+          </div>
+        </div>
+
+        <nav class="toolbar" aria-label="操作">
+          <button id="startBtn" class="tool">開始</button>
+          <button id="torch" class="tool" aria-pressed="false" hidden>ライト</button>
+          <button id="historyBtn" class="tool" aria-expanded="false" aria-controls="historySheet">履歴 <span id="count" class="badge">0</span></button>
+          <button id="settingsBtn" class="tool" aria-expanded="false" aria-controls="settingsSheet">設定</button>
+        </nav>
+      </section>
+
+      <aside id="settingsSheet" class="sheet" hidden aria-label="設定">
+        <header>
+          <h2>設定</h2>
+          <button class="tool close" data-close="settingsSheet">閉じる</button>
+        </header>
+        <div id="settings" class="sheet-body"></div>
+        <footer><a href="third-party-licenses.txt" target="_blank" rel="noopener">使っているソフトウェアのライセンス</a></footer>
+      </aside>
+
+      <aside id="historySheet" class="sheet" hidden aria-label="読み取った内容">
+        <header>
+          <h2>読み取った内容</h2>
+          <span class="spacer"></span>
+          <button id="clear" class="tool">消す</button>
+          <button class="tool close" data-close="historySheet">閉じる</button>
+        </header>
+        <div class="sheet-body">
+          <ol id="list"></ol>
+          <p id="empty" class="muted">まだありません</p>
+        </div>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
