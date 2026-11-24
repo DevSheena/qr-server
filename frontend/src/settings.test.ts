@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOM_PRESET, DEFAULTS, SettingsStore, changedKeys, parseSettings, withCamera, withFormats, withPreset, type KeyValueStorage } from './settings';
+import { CUSTOM_PRESET, DEFAULTS, SettingsStore, changedKeys, parseSettings, mirrorFor, withFormats, withPreset, type KeyValueStorage } from './settings';
 
 describe('parseSettings', () => {
   it('無い・壊れた JSON は既定', () => {
@@ -15,6 +15,12 @@ describe('parseSettings', () => {
     expect(s.mirror).toBe(true);
     expect('extra' in s).toBe(false);
   });
+  it('選択の設定は選択肢にある値だけ。カメラは端末のカメラ (選択肢に無い id) も覚える', () => {
+    const s = parseSettings(JSON.stringify({ roi: 0.33, hz: 10, camera: 'device-abc' }));
+    expect(s.roi).toBe(DEFAULTS.roi);
+    expect(s.hz).toBe(10);
+    expect(s.camera).toBe('device-abc');
+  });
 });
 
 describe('決まりごと', () => {
@@ -26,9 +32,9 @@ describe('決まりごと', () => {
     expect(withFormats(['qr_code', 'codabar']).preset).toBe(CUSTOM_PRESET);
   });
   it('前面カメラは左右反転、背面は反転なし、個別のカメラは反転を変えない', () => {
-    expect(withCamera('user')).toEqual({ camera: 'user', mirror: true });
-    expect(withCamera('environment')).toEqual({ camera: 'environment', mirror: false });
-    expect(withCamera('abc')).toEqual({ camera: 'abc' });
+    expect(mirrorFor('user')).toEqual({ mirror: true });
+    expect(mirrorFor('environment')).toEqual({ mirror: false });
+    expect(mirrorFor('abc')).toEqual({});
   });
   it('changedKeys は配列を中身で比べる', () => {
     expect([...changedKeys(DEFAULTS, { ...DEFAULTS, formats: [...DEFAULTS.formats] })]).toEqual([]);

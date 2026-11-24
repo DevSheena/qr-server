@@ -1,130 +1,148 @@
-// 設定のシートの中身。どの部品もストア (SettingsStore) とつなぎ、ストアが変われば表示も変わる。
-// 設定を足す時: settings.ts に足してから、下の buildSettingsView の rows に 1 行足す。
+// 設定のシートの中身。settings.ts の SETTINGS の表から行を作り、ストアとつなぐ (ストアが変われば表示も変わる)。
+// 設定を足す・選択肢を変えるのは settings.ts の表で、ここは触らなくてよい。
+// 表の外の特別な行は「読む種類」(プリセットとチェックボックス) だけ。
 
 import type { CameraInfo } from './camera';
-import { checkControl, row, selectControl, setNote, type Choice } from './form';
-import { FMT_LABEL, FORMATS, PRESETS } from './formats';
 import { el } from './dom';
-import type { EngineMode, EnginePlan } from './scanner/plan';
-import { CUSTOM_PRESET, withCamera, withFormats, withPreset, type Settings, type SettingsStore } from './settings';
-import { engineNote, formatsNote } from './text';
-
-/** T の中で、値の型が V のキー */
-type KeysOfType<T, V> = { [K in keyof T]-?: T[K] extends V ? K : never }[keyof T];
-
-const MODE_CHOICES: Choice<EngineMode>[] = [
-  ['auto', '自動 (内蔵を優先し、読めない種類は zxing)'],
-  ['native', '内蔵 (BarcodeDetector) だけ'],
-  ['zxing', 'zxing-wasm だけ'],
-];
-const ROI_CHOICES: Choice<number>[] = [
-  [1, '全体'],
-  [0.8, '中央 80%'],
-  [0.6, '中央 60%'],
-  [0.4, '中央 40%'],
-];
-const SCALE_CHOICES: Choice<number>[] = [
-  [1, '等倍'],
-  [0.75, '3/4'],
-  [0.5, '1/2'],
-];
-const HZ_CHOICES: Choice<number>[] = [
-  [0, '上限なし'],
-  [15, '15 回/秒まで'],
-  [10, '10 回/秒まで'],
-  [5, '5 回/秒まで'],
-];
-const RES_CHOICES: Choice<string>[] = [
-  ['640x480', '640×480'],
-  ['1280x720', '1280×720'],
-  ['1920x1080', '1920×1080'],
-];
-const CAMERA_CHOICES: Choice<string>[] = [
-  ['environment', '背面 (外側)'],
-  ['user', '前面 (自撮り)'],
-];
-const PRESET_CHOICES: Choice<string>[] = [...PRESETS.map((p): Choice<string> => [p.id, p.label]), [CUSTOM_PRESET, '自分で選ぶ']];
+import { FORMAT_INFO, FORMATS, PRESETS } from './formats';
+import type { EnginePlan } from './scanner/plan';
+import { CUSTOM_PRESET, SETTINGS, withFormats, withPreset, type CheckDef, type Choice, type SelectDef, type Settings, type SettingsStore } from './settings';
+import { engineNote, formatsNote, type Note } from './text';
 
 export interface SettingsView {
-  /** 内蔵の読み取りが使えるか (使えなければ「内蔵だけ」を選べなくする) */
+  /** 内蔵の読み取りが使えるか (使えなければ「方式」の「内蔵だけ」を選べなくする) */
   setNativeAvailable(available: boolean): void;
-  /** どの種類をどちらで読むか */
+  /** 「方式」の下に、どの種類をどちらで読むかを出す */
   showEngines(plan: EnginePlan | null): void;
-  /** この端末のカメラ (背面・前面のあとに並べる) */
+  /** この端末のカメラを「カメラ」の選択肢に足す */
   showCameras(cameras: readonly CameraInfo[]): void;
 }
 
+type Key = keyof typeof SETTINGS;
+type Value = string | number | boolean;
+
 export function buildSettingsView(root: HTMLElement, store: SettingsStore): SettingsView {
-  const s = store.value;
-  // 値の型が T の設定 key を読み書きする (キーと値の型の組み合わせは、引数の型で確かめる)
-  const read = <T>(key: KeysOfType<Settings, T>) => (now: Settings) => now[key] as T;
-  const write = <T>(key: KeysOfType<Settings, T>) => (v: T) => store.update({ [key]: v } as Partial<Settings>);
+  const read = (key: Key) => store.value[key] as Value;
+  const write = (key: Key, v: Value) => store.update({ [key]: v } as Partial<Settings>);
+  const selects = new Map<Key, SelectControl>();
+  const checkBoxes = new Map<string, HTMLElement>(); // 行の見出し → チェックを並べる入れ物
+  const rows: HTMLElement[] = [formatsRow(store)];
 
-  // ストアとつながった選択・チェックボックス (ストアが変われば表示も変わる)
-  const bindSelect = <T extends string | number>(key: KeysOfType<Settings, T>, choices: readonly Choice<T>[]) => {
-    const get = read<T>(key);
-    const c = selectControl(choices, get(s), write<T>(key));
-    store.subscribe((now) => c.set(get(now)));
-    return c;
-  };
-  const bindCheck = (key: KeysOfType<Settings, boolean>, label: string) => {
-    const get = read<boolean>(key);
-    const c = checkControl(label, get(s), write<boolean>(key));
-    store.subscribe((now) => c.set(get(now)));
-    return c.el;
-  };
+  for (const [key, def] of Object.entries(SETTINGS) as [Key, SelectDef<string | number> | CheckDef][]) {
+    if (def.kind === 'select') {
+      const c = selectControl(def.choices, read(key) as string | number, (v) => write(key, v));
+      store.subscribe(() => c.set(read(key) as string | number));
+      selects.set(key, c);
+      rows.push(row(def.label, c.el, def.note).el);
+    } else {
+      const c = checkControl(def.label, read(key) as boolean, (v) => write(key, v));
+      store.subscribe(() => c.set(read(key) as boolean));
+      let box = checkBoxes.get(def.row);
+      if (!box) {
+        box = el('div', { className: 'checks' });
+        checkBoxes.set(def.row, box);
+        rows.push(row(def.row, box, def.note).el);
+      }
+      box.append(c.el);
+    }
+  }
 
-  // 読む種類: プリセットと、1 つずつのチェックボックス
-  const preset = selectControl(PRESET_CHOICES, s.preset, (id) => store.update(withPreset(id)));
-  const boxes = FORMATS.map((f) => checkControl(FMT_LABEL[f], s.formats.includes(f), () => store.update(withFormats(FORMATS.filter((_, i) => boxes[i].input.checked)))));
-  const formatsRow = row('読む種類', el('div', {}, [preset.el, el('div', { className: 'fmts' }, boxes.map((b) => b.el))]), '');
-  const syncFormats = (now: Settings) => {
-    preset.set(now.preset);
-    boxes.forEach((b, i) => b.set(now.formats.includes(FORMATS[i])));
-    setNote(formatsRow.note, formatsNote(now.formats.length));
-  };
-  syncFormats(s);
-  store.subscribe(syncFormats);
-
-  // 方式: 内蔵が無い環境では「内蔵だけ」を選べなくし、その理由を出す
-  const mode = bindSelect('mode', MODE_CHOICES);
-  const modeRow = row('方式', mode.el, '');
+  // 「方式」の下: どの種類をどちらで読むか (読み取りの準備ができたら出す) と、内蔵が無い環境ではその理由
+  const modeNote = el('div', { className: 'note' });
   const noNative = el('div', { className: 'note', text: 'この環境にはブラウザ内蔵の読み取り (BarcodeDetector) が無いので、zxing-wasm で読む' });
   noNative.hidden = true;
-  modeRow.el.append(noNative);
+  selects.get('mode')?.el.after(modeNote, noNative);
 
-  const camera = selectControl(CAMERA_CHOICES, s.camera, (v) => store.update(withCamera(v)));
-  store.subscribe((now) => camera.set(now.camera));
-
-  const checks = el('div', { className: 'checks' }, [
-    bindCheck('mirror', '左右反転して表示'),
-    bindCheck('predict', '枠を先読みして、動かした時の遅れを減らす'),
-    bindCheck('stopAfterOne', '1 つ読んだら止める'),
-    bindCheck('vibrate', '振動'),
-    bindCheck('beep', '音'),
-  ]);
-
-  root.replaceChildren(
-    formatsRow.el,
-    modeRow.el,
-    row('読む範囲', bindSelect('roi', ROI_CHOICES).el, '絞ると zxing は約 3 倍速い。黄色の枠の中にコードをかざす').el,
-    row('縮小', bindSelect('scale', SCALE_CHOICES).el, '速くなるが、小さく写ったコードを読めなくなる').el,
-    row('念入りに探す', bindCheck('tryHarder', '回転・白黒反転したコードも探す (zxing)'), '切ると zxing は約 10 倍速い (読める割合は少し下がる)。内蔵には効かない').el,
-    row('解析の頻度', bindSelect('hz', HZ_CHOICES).el, '前の解析が終わってから最新のフレームを読む (溜めない)。下げると電池の減りが少ない').el,
-    row('解像度', bindSelect('res', RES_CHOICES).el, '上げると小さいコードを読めるが、解析は遅くなる').el,
-    row('カメラ', camera.el).el,
-    row('表示・動作', checks).el,
-  );
-
+  root.replaceChildren(...rows);
   return {
     setNativeAvailable(available) {
-      mode.setDisabled(available ? [] : ['native']);
+      selects.get('mode')?.setDisabled(available ? [] : ['native']);
       noNative.hidden = available;
     },
-    showEngines: (plan) => setNote(modeRow.note, engineNote(plan)),
+    showEngines: (plan) => setNote(modeNote, engineNote(plan)),
     showCameras(cameras) {
-      camera.setChoices([...CAMERA_CHOICES, ...cameras.map((c): Choice<string> => [c.id, c.label])]);
-      camera.set(store.value.camera);
+      const c = selects.get('camera');
+      c?.setChoices([...SETTINGS.camera.choices, ...cameras.map((x): Choice<string> => [x.id, x.label])]);
+      c?.set(store.value.camera);
     },
   };
+}
+
+/** 「読む種類」の行: プリセットの選択と、種類ごとのチェックボックス */
+function formatsRow(store: SettingsStore): HTMLElement {
+  const s = store.value;
+  const presetChoices: Choice<string>[] = [...PRESETS.map((p): Choice<string> => [p.id, p.label]), [CUSTOM_PRESET, '自分で選ぶ']];
+  const preset = selectControl(presetChoices, s.preset, (id) => store.update(withPreset(String(id))));
+  const boxes = FORMATS.map((f) =>
+    checkControl(FORMAT_INFO[f].label, s.formats.includes(f), () => store.update(withFormats(FORMATS.filter((_, i) => boxes[i].input.checked)))),
+  );
+  const r = row('読む種類', el('div', {}, [preset.el, el('div', { className: 'fmts' }, boxes.map((b) => b.el))]), '');
+  const sync = (now: Settings) => {
+    preset.set(now.preset);
+    boxes.forEach((b, i) => b.set(now.formats.includes(FORMATS[i])));
+    setNote(r.note, formatsNote(now.formats.length));
+  };
+  sync(s);
+  store.subscribe(sync);
+  return r.el;
+}
+
+// ---------- 部品 (設定の中身は知らない) ----------
+
+interface SelectControl {
+  el: HTMLSelectElement;
+  /** 表示を v にする (選択肢に無ければ先頭) */
+  set(v: string | number): void;
+  setChoices(choices: readonly Choice<string | number>[]): void;
+  /** 選べなくする値 */
+  setDisabled(values: readonly (string | number)[]): void;
+}
+
+function selectControl(choices: readonly Choice<string | number>[], value: string | number, onChange: (v: string | number) => void): SelectControl {
+  const select = el('select');
+  let current = choices;
+  const c: SelectControl = {
+    el: select,
+    set(v) {
+      select.value = String(v);
+      if (select.selectedIndex < 0) select.selectedIndex = 0;
+    },
+    setChoices(next) {
+      const keep = select.value;
+      current = next;
+      select.replaceChildren(...next.map(([v, label]) => Object.assign(el('option', { text: label }), { value: String(v) })));
+      select.value = keep;
+    },
+    setDisabled(values) {
+      for (const o of select.options) o.disabled = values.some((v) => String(v) === o.value);
+    },
+  };
+  c.setChoices(choices);
+  c.set(value);
+  // 選んだ値を、元の型 (数か文字) のまま返す
+  select.addEventListener('change', () => {
+    const hit = current.find(([v]) => String(v) === select.value);
+    if (hit) onChange(hit[0]);
+  });
+  return c;
+}
+
+function checkControl(label: string, value: boolean, onChange: (v: boolean) => void) {
+  const input = el('input');
+  input.type = 'checkbox';
+  input.checked = value;
+  input.addEventListener('change', () => onChange(input.checked));
+  return { el: el('label', { className: 'check' }, [input, label]), input, set: (v: boolean) => (input.checked = v) };
+}
+
+/** 設定の 1 行: 見出し・部品・説明 (note を渡した時だけ。後から書き換えられる) */
+function row(label: string, control: HTMLElement, note?: string): { el: HTMLElement; note: HTMLElement | undefined } {
+  const noteEl = note === undefined ? undefined : el('div', { className: 'note', text: note });
+  return { el: el('div', { className: 'row' }, [el('label', { text: label }), control, ...(noteEl ? [noteEl] : [])]), note: noteEl };
+}
+
+function setNote(e: HTMLElement | undefined, n: Note) {
+  if (!e) return;
+  e.textContent = n.text;
+  e.classList.toggle('warn', n.warn);
 }

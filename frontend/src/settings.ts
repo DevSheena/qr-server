@@ -1,103 +1,162 @@
-// 設定: 型・既定・読み込みの検査・決まりごと (純粋関数) と、保存して変化を知らせるストア。
-// 設定を足す時: Settings・DEFAULTS・PARSERS に 1 つずつ足す (PARSERS の型で、書き忘れはビルドで分かる)。
-// 画面は settings-view.ts、変わった時の動き (カメラの開き直しなど) は main.ts。
+// 設定。画面の「設定」に出す項目は、下の SETTINGS の表に 1 行ずつ書く。
+// 表に書けば、既定値・保存と読み込み・設定の画面 (settings-view.ts) に、そのまま反映される。
+// 変わった時の動き (カメラを開き直すなど) は main.ts の store.subscribe に書く。
+//
+// 読む種類 (formats・preset) だけは画面が特別なので、表の外に置く (種類そのものは formats.ts)。
 
 import { DEFAULT_PRESET_ID, PRESETS, isFmt, presetFor, type Fmt } from './formats';
-import { ENGINE_MODES, type EngineMode } from './scanner/plan';
+import type { EngineMode } from './scanner/plan';
 
-export type Settings = Readonly<{
-  /** PRESETS の id か CUSTOM_PRESET */
-  preset: string;
-  formats: readonly Fmt[];
-  mode: EngineMode;
-  /** 解析する範囲 (中央の幅・高さの割合。1 = 全体) */
-  roi: number;
-  /** 解析前の縮小 (1 = 等倍) */
-  scale: number;
-  tryHarder: boolean;
-  /** 1 秒あたりの解析の上限 (0 = 上限なし。どれでも前の解析が終わるまで次は読まない) */
-  hz: number;
-  /** '1280x720' など */
-  res: string;
-  /** 'environment' (背面) | 'user' (前面) | deviceId */
-  camera: string;
-  mirror: boolean;
-  stopAfterOne: boolean;
-  vibrate: boolean;
-  beep: boolean;
-  /** 枠を先読みして、動かした時の遅れを減らす */
-  predict: boolean;
-}>;
-export type SettingKey = keyof Settings;
+/** 選択肢: [値, 表示] */
+export type Choice<T> = readonly [value: T, label: string];
+
+/** 選択 (select) の設定 */
+export interface SelectDef<T extends string | number> {
+  kind: 'select';
+  /** 行の見出し */
+  label: string;
+  default: T;
+  choices: readonly Choice<T>[];
+  /** 行の下の説明 */
+  note?: string;
+  /** 選択肢に無い値も覚える (端末ごとのカメラなど、画面が後から選択肢を足すもの) */
+  open?: boolean;
+}
+/** チェックボックスの設定 */
+export interface CheckDef {
+  kind: 'check';
+  /** 行の見出し。同じ見出しのチェックは 1 行にまとめる */
+  row: string;
+  label: string;
+  default: boolean;
+  note?: string;
+}
+type Extra = { note?: string; open?: boolean };
+const select = <T extends string | number>(label: string, value: T, choices: readonly Choice<T>[], extra: Extra = {}): SelectDef<T> => ({
+  kind: 'select',
+  label,
+  default: value,
+  choices,
+  ...extra,
+});
+const check = (row: string, label: string, value: boolean, note?: string): CheckDef => ({ kind: 'check', row, label, default: value, note });
+
+// ---------- 設定の表 (この順に画面に並ぶ。読む種類はいちばん上) ----------
+export const SETTINGS = {
+  // 速さの調整
+  mode: select<EngineMode>('方式', 'auto', [
+    ['auto', '自動 (内蔵を優先し、読めない種類は zxing)'],
+    ['native', '内蔵 (BarcodeDetector) だけ'],
+    ['zxing', 'zxing-wasm だけ'],
+  ]),
+  roi: select<number>(
+    '読む範囲',
+    1,
+    [
+      [1, '全体'],
+      [0.8, '中央 80%'],
+      [0.6, '中央 60%'],
+      [0.4, '中央 40%'],
+    ],
+    { note: '絞ると zxing は約 3 倍速い。黄色の枠の中にコードをかざす' },
+  ),
+  scale: select<number>(
+    '縮小',
+    1,
+    [
+      [1, '等倍'],
+      [0.75, '3/4'],
+      [0.5, '1/2'],
+    ],
+    { note: '速くなるが、小さく写ったコードを読めなくなる' },
+  ),
+  tryHarder: check('念入りに探す', '回転・白黒反転したコードも探す (zxing)', false, '切ると zxing は約 10 倍速い (読める割合は少し下がる)。内蔵には効かない'),
+  hz: select<number>(
+    '解析の頻度',
+    0,
+    [
+      [0, '上限なし'],
+      [15, '15 回/秒まで'],
+      [10, '10 回/秒まで'],
+      [5, '5 回/秒まで'],
+    ],
+    { note: '前の解析が終わってから最新のフレームを読む (溜めない)。下げると電池の減りが少ない' },
+  ),
+  // カメラ
+  res: select<string>(
+    '解像度',
+    '1280x720',
+    [
+      ['640x480', '640×480'],
+      ['1280x720', '1280×720'],
+      ['1920x1080', '1920×1080'],
+    ],
+    { note: '上げると小さいコードを読めるが、解析は遅くなる' },
+  ),
+  camera: select<string>(
+    'カメラ',
+    'environment',
+    [
+      ['environment', '背面 (外側)'],
+      ['user', '前面 (自撮り)'],
+    ],
+    { open: true }, // この端末のカメラ (deviceId) は、カメラを開いた後に画面が足す
+  ),
+  // 表示・動作
+  mirror: check('表示・動作', '左右反転して表示', false),
+  predict: check('表示・動作', '枠を先読みして、動かした時の遅れを減らす', true),
+  stopAfterOne: check('表示・動作', '1 つ読んだら止める', false),
+  vibrate: check('表示・動作', '振動', true),
+  beep: check('表示・動作', '音', false),
+};
+
+// ---------- 型と既定値 (表から作る) ----------
+type Defs = typeof SETTINGS;
+export type SettingKey = keyof Defs | 'preset' | 'formats';
+type ValueOf<D> = D extends SelectDef<infer T> ? T : D extends CheckDef ? boolean : never;
+
+export type Settings = Readonly<
+  { [K in keyof Defs]: ValueOf<Defs[K]> } & {
+    /** PRESETS の id か CUSTOM_PRESET */
+    preset: string;
+    formats: readonly Fmt[];
+  }
+>;
 
 export const CUSTOM_PRESET = 'custom';
 
 export const DEFAULTS: Settings = {
+  ...(Object.fromEntries(Object.entries(SETTINGS).map(([k, d]) => [k, d.default])) as { [K in keyof Defs]: ValueOf<Defs[K]> }),
   preset: DEFAULT_PRESET_ID,
   formats: PRESETS.find((p) => p.id === DEFAULT_PRESET_ID)!.formats,
-  mode: 'auto',
-  roi: 1,
-  scale: 1,
-  tryHarder: false,
-  hz: 0,
-  res: '1280x720',
-  camera: 'environment',
-  mirror: false,
-  stopAfterOne: false,
-  vibrate: true,
-  beep: false,
-  predict: true,
 };
 
-// ---------- 読み込み (保存した値は壊れていることがあるので、1 つずつ型を確かめる) ----------
-type Parser<T> = (v: unknown) => T | undefined;
-const str: Parser<string> = (v) => (typeof v === 'string' ? v : undefined);
-const num: Parser<number> = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
-const bool: Parser<boolean> = (v) => (typeof v === 'boolean' ? v : undefined);
-const oneOf =
-  <T>(choices: readonly T[]): Parser<T> =>
-  (v) =>
-    choices.includes(v as T) ? (v as T) : undefined;
-const formats: Parser<Fmt[]> = (v) => (Array.isArray(v) ? v.filter(isFmt) : undefined);
+// ---------- 読み込み (保存した値は壊れていることがあるので、1 つずつ確かめる) ----------
 
-const PARSERS: { [K in SettingKey]: Parser<Settings[K]> } = {
-  preset: str,
-  formats,
-  mode: oneOf(ENGINE_MODES),
-  roi: num,
-  scale: num,
-  tryHarder: bool,
-  hz: num,
-  res: str,
-  camera: str,
-  mirror: bool,
-  stopAfterOne: bool,
-  vibrate: bool,
-  beep: bool,
-  predict: bool,
-};
-const KEYS = Object.keys(PARSERS) as SettingKey[];
+/** 保存した値 v を、その設定に使えるか (選択は選択肢のどれか、チェックは true / false) */
+function accepts(def: SelectDef<string | number> | CheckDef, v: unknown): boolean {
+  if (def.kind === 'check') return typeof v === 'boolean';
+  if (def.open) return typeof v === typeof def.default;
+  return def.choices.some(([c]) => c === v);
+}
 
-/** 保存した文字列 (JSON) から設定を作る。読めない値は既定にする */
+/** 保存した文字列 (JSON) から設定を作る。使えない値は既定にする */
 export function parseSettings(raw: string | null): Settings {
-  let j: unknown = null;
+  let saved: Record<string, unknown> = {};
   try {
-    j = JSON.parse(raw ?? 'null');
+    const j: unknown = JSON.parse(raw ?? 'null');
+    if (j && typeof j === 'object') saved = j as Record<string, unknown>;
   } catch {
     /* 読めなければ既定 */
   }
-  if (!j || typeof j !== 'object') return DEFAULTS;
-  const src = j as Record<string, unknown>;
-  const out: { -readonly [K in SettingKey]: Settings[K] } = { ...DEFAULTS };
-  const take = <K extends SettingKey>(k: K) => {
-    const v = PARSERS[k](src[k]);
-    if (v !== undefined) out[k] = v;
-  };
-  KEYS.forEach(take);
-  return out;
+  const out: Record<string, unknown> = { ...DEFAULTS };
+  for (const [key, def] of Object.entries(SETTINGS)) if (accepts(def, saved[key])) out[key] = saved[key];
+  if (typeof saved.preset === 'string') out.preset = saved.preset;
+  if (Array.isArray(saved.formats)) out.formats = saved.formats.filter(isFmt);
+  return out as Settings;
 }
 
-// ---------- 決まりごと (純粋関数。設定の画面から呼ぶ) ----------
+// ---------- 決まりごと (純粋関数) ----------
 
 /** プリセットを選ぶ: 読む種類もそのプリセットにする */
 export function withPreset(id: string): Partial<Settings> {
@@ -108,12 +167,11 @@ export function withPreset(id: string): Partial<Settings> {
 /** 読む種類を選ぶ: 同じ組み合わせのプリセットがあればそれ、無ければ「自分で選ぶ」にする */
 export const withFormats = (formats: readonly Fmt[]): Partial<Settings> => ({ formats, preset: presetFor(formats)?.id ?? CUSTOM_PRESET });
 
-/** カメラを選ぶ: 前面は鏡のように見えた方が自然なので、背面・前面を選んだ時は左右反転も合わせる (後から変えられる) */
-export const withCamera = (camera: string): Partial<Settings> =>
-  camera === 'environment' || camera === 'user' ? { camera, mirror: camera === 'user' } : { camera };
+/** カメラを選んだ時の左右反転: 前面は鏡のように見えた方が自然なので反転、背面は反転なし、個別のカメラは変えない */
+export const mirrorFor = (camera: string): Partial<Settings> => (camera === 'user' || camera === 'environment' ? { mirror: camera === 'user' } : {});
 
-const same = (a: unknown, b: unknown) =>
-  Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, i) => x === b[i]) : a === b;
+const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((x, i) => x === b[i]) : a === b);
+const KEYS = Object.keys(DEFAULTS) as SettingKey[];
 
 /** 変わった設定の名前 */
 export const changedKeys = (a: Settings, b: Settings): Set<SettingKey> => new Set(KEYS.filter((k) => !same(a[k], b[k])));

@@ -1,6 +1,6 @@
 // 画面に出す文字を作る (純粋関数)。言い回しを変える時はここを直す。
 
-import { FMT_LABEL, formatNames } from './formats';
+import { FORMAT_INFO, formatNames } from './formats';
 import type { Size } from './geometry';
 import type { EnginePlan } from './scanner/plan';
 import type { Code, Engine } from './scanner/types';
@@ -12,11 +12,11 @@ export const isUrl = (text: string) => /^https?:\/\/\S+$/i.test(text);
 export const truncate = (text: string, max: number) => (text.length > max ? text.slice(0, max) + '…' : text);
 
 /** 枠の上に出す名札 */
-export const codeLabel = (c: Code) => `${FMT_LABEL[c.format]}: ${truncate(c.text, 32)}`;
+export const codeLabel = (c: Code) => `${FORMAT_INFO[c.format].label}: ${truncate(c.text, 32)}`;
 
 /** 読んだ内容の下に出す説明 (種類・時刻・方式・回数)。time は表示用に整えた時刻 */
 export const metaText = (c: Code, count: number, time: string) =>
-  [FMT_LABEL[c.format], time, ENGINE_LABEL[c.engine], ...(count > 1 ? [`${count} 回`] : [])].join(' · ');
+  [FORMAT_INFO[c.format].label, time, ENGINE_LABEL[c.engine], ...(count > 1 ? [`${count} 回`] : [])].join(' · ');
 
 /** 状態の表示に出す方式 ('内蔵'、'内蔵 + zxing (Codabar)'、'zxing' など) */
 export function engineSummary(plan: EnginePlan | null): string {

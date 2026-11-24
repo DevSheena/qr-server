@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FORMATS, PRESETS, ZXING_NAME, formatNames, normFormat, presetFor } from './formats';
+import { FORMATS, FORMAT_INFO, PRESETS, formatNames, normFormat, presetFor } from './formats';
 
 describe('normFormat', () => {
   it('BarcodeDetector の名前も zxing-wasm の名前も同じ種類に直す', () => {
     for (const f of FORMATS) {
       expect(normFormat(f)).toBe(f);
-      expect(normFormat(ZXING_NAME[f])).toBe(f);
+      expect(normFormat(FORMAT_INFO[f].zxing)).toBe(f);
     }
     expect(normFormat('EAN-13')).toBe('ean_13');
     expect(normFormat('UPC-A')).toBe('upc_a');

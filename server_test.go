@@ -1,10 +1,13 @@
-package server
+package main
 
 import (
+	"encoding/json"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -18,7 +21,7 @@ func newTestServer(t *testing.T) http.Handler {
 		"assets/index-AbC123.js":        {Data: []byte("console.log(1)")},
 		"assets/zxing_reader-XyZ9.wasm": {Data: []byte("\x00asm")},
 	}
-	h, err := New(Deps{Site: site, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Version: "test"})
+	h, err := newHandler(site, "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +36,31 @@ func get(h http.Handler, path string, header map[string]string) *httptest.Respon
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+func TestHealth(t *testing.T) {
+	rec := get(newTestServer(t), "/api/health", nil)
+	var got healthResponse
+	if rec.Code != http.StatusOK || json.NewDecoder(rec.Body).Decode(&got) != nil {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if got != (healthResponse{Status: "ok", Version: "test"}) {
+		t.Errorf("got %+v", got)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+}
+
+func TestUnknownAPIIsJSON404(t *testing.T) {
+	h := newTestServer(t)
+	for _, path := range []string{"/api/nope", "/api/"} {
+		rec := get(h, path, nil)
+		var got errorResponse
+		if rec.Code != http.StatusNotFound || json.NewDecoder(rec.Body).Decode(&got) != nil || got.Error == "" {
+			t.Errorf("%s: status = %d body = %+v (画面の index.html を返してはいけない)", path, rec.Code, got)
+		}
+	}
 }
 
 func TestStatic(t *testing.T) {
@@ -71,8 +99,7 @@ func TestStatic(t *testing.T) {
 
 func TestETagReturns304WhenUnchanged(t *testing.T) {
 	h := newTestServer(t)
-	first := get(h, "/", nil)
-	tag := first.Header().Get("ETag")
+	tag := get(h, "/", nil).Header().Get("ETag")
 	if tag == "" {
 		t.Fatal("ETag が無い")
 	}
@@ -84,15 +111,8 @@ func TestETagReturns304WhenUnchanged(t *testing.T) {
 	}
 }
 
-func TestAPIAndHeaders(t *testing.T) {
+func TestSecurityHeaders(t *testing.T) {
 	h := newTestServer(t)
-	rec := get(h, "/api/health", nil)
-	if rec.Code != 200 || rec.Header().Get("Content-Type") != "application/json; charset=utf-8" {
-		t.Errorf("/api/health: status = %d type = %q", rec.Code, rec.Header().Get("Content-Type"))
-	}
-	if rec := get(h, "/api/unknown", nil); rec.Code != 404 {
-		t.Errorf("/api/unknown: status = %d (画面の index.html を返してはいけない)", rec.Code)
-	}
 	for _, path := range []string{"/", "/api/health", "/nope"} {
 		if got := get(h, path, nil).Header().Get("X-Content-Type-Options"); got != "nosniff" {
 			t.Errorf("%s: 安全のためのヘッダが無い", path)
@@ -110,6 +130,39 @@ func TestFileName(t *testing.T) {
 	} {
 		if got := fileName(in); got != want {
 			t.Errorf("fileName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestOpenURLs(t *testing.T) {
+	if got := openURLs("192.168.1.5:8443", true); len(got) != 1 || got[0] != "https://192.168.1.5:8443/" {
+		t.Errorf("got %v", got)
+	}
+	if got := openURLs(":8080", false); len(got) == 0 || got[0] != "http://localhost:8080/" {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestCertAndKeyGoTogether(t *testing.T) {
+	err := run(":0", "cert.pem", "", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err == nil || !strings.Contains(err.Error(), "-cert と -key") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// 画面のビルド結果がちゃんと埋め込まれているか (index.html と、ハッシュ付きの assets/。macOS の隠しファイルは除く)
+func TestSiteIsEmbedded(t *testing.T) {
+	site, err := siteFS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assets, err := fs.Glob(site, "assets/*")
+	if err != nil || len(assets) == 0 {
+		t.Fatalf("assets/ が空 (%v)", err)
+	}
+	for _, p := range assets {
+		if strings.HasPrefix(p, "assets/._") {
+			t.Errorf("macOS の隠しファイルが混ざっている: %s", p)
 		}
 	}
 }

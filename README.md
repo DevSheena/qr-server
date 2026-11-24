@@ -1,133 +1,166 @@
 # qr-server — QR・バーコードリーダー (Go のサーバー版)
 
-[qr-reader](../qr-reader/README.md) の画面を、Go のサーバーから配る形にしたもの。
-**画面のファイルを Go の実行ファイルに埋め込む (go:embed) ので、本番ではこの実行ファイル 1 つを置くだけで動く。**
-画面の見た目と動きは qr-reader と同じで、コードは読みやすく分け直した (下の「qr-reader から変えたこと」)。
+ブラウザで動く QR・バーコードリーダーの画面と API を、**実行ファイル 1 つ**で配るサーバー。
+画面のファイルは実行ファイルに埋め込む (go:embed) ので、LAN の PC にはこの実行ファイル (と HTTPS の証明書) を置くだけで動く。
+Linux・Windows・Mac のどれでも、同じ手順で作って動かせる (Docker は要らない)。
+
+## 必要なもの (開発する PC)
+
+| もの | 版 | 使い道 |
+|---|---|---|
+| Node.js | 22 以上 | 画面のビルドとテスト (frontend/) |
+| Go | 1.22 以上 | サーバーのビルドとテスト |
+| git | — | 無くても動く。あれば、どのコミットから作ったかが /api/health に出る |
+
+ビルドの時にインターネットを使うのは、画面の依存を入れる `npm ci` だけ。動かす PC (LAN) はインターネットが無くてよい。
+
+## 作る (どの OS も同じ)
+
+```bash
+cd frontend
+npm ci          # 初回と、package-lock.json が変わった時だけ
+npm run build   # 画面をビルドして ../web/ に出す
+cd ..
+go build        # web/ を埋め込んだ実行ファイル qr-server (Windows は qr-server.exe) ができる
+```
+
+`go build` は `web/` が無いと失敗するので、画面を変えたら必ず `npm run build` から。
+
+## 動かす
+
+```bash
+./qr-server                                          # HTTP: http://<この PC の IP>:8080/
+./qr-server -addr :8443 -cert cert.pem -key key.pem   # HTTPS: https://<この PC の IP>:8443/
+```
+
+- Windows の PowerShell では `.\qr-server.exe -addr :8443 -cert cert.pem -key key.pem`
+- 起動すると、ほかの端末から開く URL をログに出す。止める時は Ctrl+C
+- **スマホのカメラは HTTPS でないと使えない** (この PC の中で localhost で開く時だけは HTTP でよい)
+- 初回は OS のファイアウォールが聞いてくることがある。Windows は「プライベート ネットワーク」を許可。Linux は使うポートを開ける
+
+### HTTPS の証明書を作る
+
+Go に付いてくる道具で作れる (どの OS も同じ。`--host` には、この PC の IP アドレスを書く):
+
+```bash
+go run "$(go env GOROOT)/src/crypto/tls/generate_cert.go" --host 192.168.1.10,localhost
+```
+
+今いるフォルダに `cert.pem` (証明書) と `key.pem` (秘密鍵) ができる。有効期限は 1 年。
+自分で作った証明書なので、端末ごとに初回だけ警告が出る (「詳細」などから進む)。社内の証明書があれば、それを `-cert`・`-key` に渡す。
+秘密鍵は人に渡さない (`*.pem` は git に入れない設定にしてある)。
+
+### ほかの OS 用に作る
+
+開発する PC と動かす PC の OS が違う時は、GOOS・GOARCH を付けて作り、できた 1 つのファイルを持っていく。
+
+```bash
+GOOS=linux GOARCH=amd64 go build -o qr-server-linux     # Linux / Mac / WSL で
+```
+
+PowerShell では `$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o qr-server-linux` (終わったら `Remove-Item Env:GOOS, Env:GOARCH`)。
+GOOS は `linux`・`windows`・`darwin` (Mac)、GOARCH は `amd64` (Intel・AMD)・`arm64` (Apple の M シリーズなど)。
+
+## テスト
+
+```bash
+cd frontend
+npm test        # 画面 (vitest。純粋な関数とつなぎ目)
+npx tsc --noEmit  # 型の確かめ
+cd ..
+go test ./...   # サーバー (web/ が要るので、先に npm run build)
+```
 
 ## 構成
 
 ```
 qr-server/
-├─ main.go            起動。web/ を go:embed で実行ファイルに埋め込む
-├─ go.mod             Go 1.27。外部の依存なし (標準ライブラリだけ)
-├─ internal/
-│   ├─ config/        環境変数から設定を読む
-│   ├─ server/        入口: /api/ と画面を振り分け、共通のヘッダ・ログ・キャッシュ
-│   └─ api/           API (/api/...)
-├─ frontend/          画面のソース (Vite + TypeScript)。ビルドすると ../web/ に出る
-├─ web/               ブラウザに配るファイル (ビルドで作る。git に入れない)
-├─ build/             実行ファイル (build/linux-<CPU>/qr-server) と試し用の証明書 (git に入れない)
-├─ Dockerfile         本番用のイメージ。実行ファイル 1 つをコピーするだけ
-└─ bin/               Docker で動かす手順 (下の「動かし方」)
+├─ main.go        起動 (起動オプション・web/ の埋め込み・版)
+├─ server.go      要求の受け方 (API・画面の配信・安全のためのヘッダ・ログ)
+├─ server_test.go
+├─ go.mod         外部の依存なし (標準ライブラリだけ)
+├─ frontend/      画面のソース (Vite + TypeScript)。ビルドすると ../web/ に出る
+├─ web/           ブラウザに配るファイル (ビルドで作る。git に入れない)
+├─ bin/・Dockerfile  この Mac 用 (下の「この Mac で動かす」)
+└─ README.md
 ```
 
-## 仕組み
-
 ```
-frontend/ ──Vite──▶ web/ ──go:embed──▶ qr-server (実行ファイル 1 つ) ──▶ Docker イメージ ──▶ デプロイ先
+frontend/ ──npm run build──▶ web/ ──go build (埋め込む)──▶ qr-server (1 ファイル) ──▶ LAN の PC で動かす
 ```
 
 | 要求 | 返すもの |
 |---|---|
-| `GET /api/health` | `{"status":"ok","version":"<git のコミット>"}`。生存確認と、どの版が動いているかの確認用 |
-| `/api/` の下のそれ以外 | JSON の 404 (画面を返さない) |
-| それ以外 | `web/` のファイル。無ければ 404 (フォルダの一覧は見せない) |
+| `GET /api/health` | `{"status":"ok","version":"<git のコミット>"}`。動いているかと、どの版が動いているかの確認用 |
+| `/api/` の下のそれ以外 | JSON の 404 |
+| それ以外 | `web/` のファイル。`assets/` は 1 年キャッシュ、ほかは毎回確かめる (変わっていなければ 304)。無ければ 404 |
 
-- **キャッシュ:** `assets/` (ファイル名に中身のハッシュが付く) は 1 年使わせる。`index.html` などは毎回確かめさせ、変わっていなければ 304 (ETag は起動時に 1 回だけ計算)
-- **安全のためのヘッダ:** 中身の種類を推測させない・ほかのサイトに埋め込ませない・カメラはこのサイトだけ、など (`internal/server/middleware.go`)
-- **ログ:** 要求ごとに 1 行 (方法・パス・状態・時間)
-- **止める時:** SIGTERM (Cloud Run などが送る) を受けたら、処理中の要求を待ってから止まる
+## どこを直すか
 
-### 設定 (環境変数)
-
-| 名前 | 既定 | 意味 |
-|---|---|---|
-| `PORT` | 8080 | 待ち受けるポート。Cloud Run などは自分で決めて渡す |
-| `TLS_CERT_FILE` / `TLS_KEY_FILE` | なし | 両方あれば HTTPS で待つ。本番はデプロイ先が HTTPS を付けるので不要。手元でスマホから試す時だけ使う |
-
-## 動かし方
-
-Docker Desktop が動いていること (自動では起動しない。止まっていれば `open -a Docker`)。
-どれも上限つきのコンテナの中で動き、全プロジェクト共通の予算判定と鍵 (`/tmp/docker_budget.lock`) を通る (グローバル規約 R1/R2)。
-
-```bash
-bin/serve.sh        # ビルド → イメージ → 配信 (前のものは入れ替える)
-bin/test.sh         # テスト (画面: 型の確かめ + vitest、Go: vet + test)
-bin/stop.sh         # このアプリのコンテナだけを止める
-bin/image.sh amd64  # デプロイ用のイメージ (qr-server:<版>-amd64)
-```
-
-- この Mac: http://localhost:5187/
-- スマホ (同じ Wi-Fi): https://<Mac の IP>:5188/ (自己署名。最初の 1 回だけ証明書の警告を「詳細」から進む。証明書は `build/devcert/` に作って使い回す)
-- `LAN=0 bin/serve.sh` でスマホ用の配信を止める
-
-**`go build` を直接打つと失敗する** (`web/` が無いため)。必ず `bin/build.sh` を通す (画面をビルドしてから Go をビルドする)。
-
-### コンテナの上限 (実測、2026-11-24、Mac M4)
-
-| 作業 | ピーク | 上限 |
-|---|---|---|
-| 画面の依存のインストール (`npm ci`) | 548 MiB | 1 GiB |
-| 画面のビルド | 205 MiB | 512 MiB |
-| 画面のテスト | 253 MiB | 512 MiB |
-| Go のビルド・テスト (キャッシュなし) | 393 MiB | 768 MiB |
-| 配信 (サーバー 1 つ) | 6〜8 MiB | 64 MiB・CPU 0.5 |
-
-イメージは 17.7 MB (中身は実行ファイル 7.8 MB と、最小の土台 distroless/static)。
-
-## デプロイ
-
-デプロイ先はまだ決めていない。どこでも、`bin/image.sh amd64` で作ったイメージを送れば動く (Cloud Run などは amd64。この Mac は arm64)。
-デプロイ先では `PORT` を渡し、HTTPS はデプロイ先に付けてもらう (カメラには HTTPS が要る)。
-
-## 直し方 (どこを触るか)
-
-| やりたいこと | 触る所 |
+| やりたいこと | 直す所 |
 |---|---|
-| API を足す | `internal/api/api.go` の `New` に 1 行足し、ハンドラを同じパッケージに書く。使う部品は `Deps` で渡す |
-| サーバーの設定を足す | `internal/config/config.go` の `Config` と `Load` |
-| 画面の設定を足す | `frontend/src/settings.ts` (`Settings`・`DEFAULTS`・`PARSERS`) と `settings-view.ts` の行。変わった時の動きは `main.ts` の `store.subscribe` |
-| 読む種類を足す | `frontend/src/formats.ts` (`FORMATS`・`FMT_LABEL`・`ZXING_NAME`。書き忘れはビルドで分かる) |
-| 画面の文字を変える | `frontend/src/text.ts` |
-| ポート・イメージを変える | `bin/env.sh` |
+| 読む種類を足す・外す・名前を変える | `frontend/src/formats.ts` の `FORMAT_INFO` の表 (1 種類 1 行) |
+| 読む種類の組み合わせ (プリセット) | `frontend/src/formats.ts` の `PRESETS` と `DEFAULT_PRESET_ID` |
+| 設定を足す・選択肢や既定値や説明を変える (速さの調整も) | `frontend/src/settings.ts` の `SETTINGS` の表 (1 設定 1 項目)。画面・保存・読み込みは自動で付いてくる |
+| 設定が変わった時の動き | `frontend/src/main.ts` の `store.subscribe` (1 つの動きが 1 行) |
+| 設定の値をどこで使っているか | `main.ts` の `store.value.<名前>` (例: `roi`・`scale` は `scanOnce`、`hz` は `ScanLoop`) |
+| zxing の細かい指定 (縮小して探す・一度に読む数) | `frontend/src/scanner/zxing.worker.ts` の `readerOptions` |
+| 枠の先読み・枠を残す時間の数値 | `frontend/src/tracks.ts` の `TRACKING` |
+| 画面に出る文字 | `frontend/src/text.ts` (設定の文字は `settings.ts` の表) |
+| API を足す | `server.go` の `newHandler` に 1 行足し、ハンドラを「API」の節に書く |
+| 起動オプションを足す | `main.go` の `main` (`flag.String` など) |
 
 ### 画面のファイル (frontend/src)
 
 | ファイル | 役割 |
 |---|---|
-| `main.ts` | 部品を作ってつなぐだけ |
-| `camera.ts` / `scan-loop.ts` | カメラ / 読み取りの繰り返し (前の解析が終わるまで次は読まない) |
-| `scanner/` | 読み取り。`plan.ts` 内蔵と zxing の振り分け、`normalize.ts` 結果を揃える (UPC-A の表記など)、`zxing-client.ts` Worker とのやりとり |
-| `frame.ts` | 解析する画像 (読む範囲・縮小) |
+| `main.ts` | 部品を作ってつなぐ。設定が変わった時の動きもここ |
+| `formats.ts` / `settings.ts` | 読む種類の表 / 設定の表・保存・読み込み |
+| `settings-view.ts` | 設定の画面 (表から作るので、普段は触らない) |
+| `camera.ts` / `scan-loop.ts` / `frame.ts` | カメラ / 読み取りの繰り返し / 解析する画像 (読む範囲・縮小) |
+| `scanner/` | 読み取り。`plan.ts` 内蔵と zxing の振り分け、`normalize.ts` 結果を揃える (UPC-A の表記など)、`zxing.worker.ts` zxing |
 | `tracks.ts` / `overlay.ts` | 枠の追跡と先読み / 描画 |
-| `history.ts` / `results-view.ts` | 読んだ内容の記録 / 表示 |
-| `settings.ts` / `settings-view.ts` / `form.ts` | 設定の保存と決まりごと / 設定の画面 / 汎用の部品 |
-| `sheets.ts` / `notify.ts` / `text.ts` | シートの開閉 / 振動・音 / 画面の文字 |
-| `geometry.ts` / `math.ts` / `formats.ts` / `dom.ts` / `elements.ts` | 座標 / 数 / 読む種類 / DOM の道具 / HTML の要素 |
+| `history.ts` / `results-view.ts` | 読んだ内容の記録 / 表示 (最後に読んだ内容と履歴) |
+| `text.ts` / `sheets.ts` / `notify.ts` | 画面の文字 / 設定・履歴のシート / 振動と音 |
+| `geometry.ts` / `math.ts` / `dom.ts` / `elements.ts` | 座標 / 数 / DOM の道具 / HTML の要素 |
+| `*.test.ts` | テスト (元のファイルの隣) |
 
-## qr-reader から変えたこと
+## 使っているもの
 
-- **配り方:** Vite の配信 → Go のサーバー。画面は実行ファイルに埋め込む。手元のスマホ用の HTTPS も Go が受け持つ
-- **画面のコード:** 800 行の `main.ts` を役割ごとのファイルに分けた。計算は純粋関数にし、ブラウザの部品 (BarcodeDetector・Worker・localStorage) は外から渡す (テストでは偽物を渡す)
-- **設定:** 1 つのストアに集め、変わった時の動きを `main.ts` の 1 か所にまとめた。保存した値は 1 つずつ型を確かめて読む (壊れた値で動かなくならない)
-- **直した不具合になりうる所:**
-  - zxing の Worker が落ちた時に、読み取りが待ったまま止まる → 待っている要求を失敗にする
-  - 画面を裏から戻すたびに、読み取りの予約が 2 重になる → 前の予約を取り消してから予約し直す
-  - 設定を続けて変えた時に、古い準備の終わりで新しい設定が上書きされる → 後の設定だけを使う
-- **テスト:** 画面 57 件 (vitest)・Go 4 パッケージ。qr-reader にはテストが無かった
+| 区分 | もの | ライセンス |
+|---|---|---|
+| 読み取り (主) | BarcodeDetector (ブラウザ内蔵。ライブラリ不要) | — |
+| 読み取り (予備) | zxing-wasm 3.1.6 (中身は zxing-cpp。iPhone の Safari など内蔵が無い環境用) | MIT / Apache-2.0 |
+| 画面 | TypeScript 5.9、Vite 8 (ビルドだけ)、vitest 5 (テスト) | — |
+| サーバー | Go (標準ライブラリだけ) | BSD |
+
+npm のパッケージは npm 公式 (registry.npmjs.org) から入れ、版と改ざん確認用のハッシュを `frontend/package-lock.json` に記録している。
+配るファイルに入るのは zxing-wasm だけで、そのライセンス文はビルドの時に `web/third-party-licenses.txt` に作り、画面の設定の下からリンクしている。
+
+## この Mac で動かす (Docker)
+
+このリポジトリを置いている Mac では、重い処理を上限つきのコンテナで動かす決まり (グローバル規約 R1/R2) があるので、`bin/` の手順で動かす。
+ほかの PC では使わない (Mac 専用のコマンドを使っている)。
+
+```bash
+bin/serve.sh   # ビルド → 配信 (Mac: http://localhost:5187/ 、スマホ: https://<Mac の IP>:5188/)
+bin/test.sh    # テスト
+bin/stop.sh    # このアプリのコンテナだけを止める
+```
+
+コンテナの上限 (実測、2026-11-24、Mac M4): 依存のインストール 548 MiB → 1 GiB、画面のビルド 205 MiB・テスト 253 MiB → 512 MiB、Go のビルド・テスト 393 MiB → 768 MiB、配信 6〜8 MiB → 64 MiB。
 
 ## 確かめたこと (2026-11-24、Mac M4 の Chrome)
 
-動く QR を映した偽のカメラで確かめた。
+動く QR を映した偽のカメラと、この Mac の Docker で確かめた。
 
 | 項目 | 結果 |
 |---|---|
-| 読み取り (自動 = 内蔵) | 読めた。11 ms・58 回/秒 |
-| 方式「zxing だけ」 | zxing で読めた。設定の説明も切り替わった |
-| 枠の先読み (左右に往復) | 枠のずれ 26 px → 11 px (qr-reader の計測と同じ程度) |
-| 読む種類・保存 | チェックを外すと合うプリセットに変わり、localStorage に保存された |
-| 1 つ読んだら止める・タップで続ける・履歴を消す・停止 | 動いた |
-| スマホの幅 (375px) | ページ全体がスクロールしない。設定は下から重なる |
-| サーバー | `/api/health`、304、`.wasm` の種類、フォルダの一覧の 404、HTTPS (5188) |
+| 読み取り (自動 = 内蔵 / zxing だけ) | どちらも読めた |
+| 枠の先読み | 枠のずれ 26 px → 11 px |
+| 設定の画面 | 表から前と同じ行・説明で作られ、変えると保存された。前面カメラにすると左右反転も付いた |
+| 履歴・1 つ読んだら止める・停止・スマホの幅 | 動いた |
+| サーバー | `/api/health`、304、`.wasm` の種類、404、HTTPS |
+| 3 つの OS 向けのビルド | Linux (amd64)・Windows (amd64 の exe)・Mac (arm64) の実行ファイルができた。証明書を作る道具も動いた |
 
-**まだ確かめていないこと:** 実際のスマホ (iPhone の Safari・Android の Chrome) と本物のカメラ、デプロイ先での動き。
+**まだ確かめていないこと:** Windows・Linux の実機での起動と、ファイアウォール、本物のスマホとカメラ。

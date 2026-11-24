@@ -10,9 +10,9 @@ source "$ROOT/bin/env.sh"
 
 "$ROOT/bin/image.sh"
 IMAGE="$APP:dev"
-# 本番と同じく、コンテナの中では 8080 で待つ。サーバーはメモリをほとんど使わない (実測は README)
-SERVE=(--image "$IMAGE" --detach --env PORT=8080)
-restart() { # <名前> <run.sh のオプション...>
+# コンテナの中では既定の :8080 で待つ。サーバーはメモリをほとんど使わない (実測は README)
+SERVE=(--image "$IMAGE" --detach)
+restart() { # <名前> <run.sh のオプション...> [-- <サーバーの起動オプション...>]
   local name="$1"; shift
   docker rm -f "$name" >/dev/null 2>&1 || true
   APP_MEM=64m APP_CPUS=0.5 "$ROOT/bin/run.sh" --name "$name" "${SERVE[@]}" "$@" >/dev/null
@@ -28,5 +28,5 @@ fi
 IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
 "$ROOT/bin/devcert.sh" "${IP:-}"
 restart "$APP-lan" --publish "0.0.0.0:$LAN_PORT:8080" --volume "$ROOT/build/devcert:/certs:ro" \
-  --env TLS_CERT_FILE=/certs/cert.pem --env TLS_KEY_FILE=/certs/key.pem
+  -- -cert /certs/cert.pem -key /certs/key.pem
 echo "[$APP] スマホ (同じ Wi-Fi): https://${IP:-<Mac の IP>}:$LAN_PORT/ (最初の 1 回だけ証明書の警告が出るので「詳細」から進む)"

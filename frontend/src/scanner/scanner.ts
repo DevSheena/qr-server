@@ -1,7 +1,7 @@
 // 読み取りの中心: 読む種類と方式から振り分け (plan.ts) を決め、内蔵と zxing を並べて走らせ、結果を揃える (normalize.ts)。
 // ブラウザの部品 (BarcodeDetector・Worker) は外から渡す (browser.ts)。テストでは偽物を渡す。
 
-import { ZXING_NAME, type Fmt } from '../formats';
+import { FORMAT_INFO, type Fmt } from '../formats';
 import { toCodes } from './normalize';
 import { planEngines, type EngineMode, type EnginePlan } from './plan';
 import type { Code, FrameSources, RawCode } from './types';
@@ -57,7 +57,7 @@ export class Scanner {
     const plan = planEngines(want, await this.deps.supportedFormats(), mode);
     const detector = plan.detectorFormats.length ? this.deps.createDetector(plan.detectorFormats) : null;
     const zxing = plan.zxing.length ? (this.zxing ??= this.deps.createZxing()) : null;
-    if (zxing) await zxing.configure({ formats: plan.zxing.map((f) => ZXING_NAME[f]), tryHarder });
+    if (zxing) await zxing.configure({ formats: plan.zxing.map((f) => FORMAT_INFO[f].zxing), tryHarder });
     if (generation !== this.generation) return null;
     this.active = { want: [...want], plan, detector, zxing };
     return plan;

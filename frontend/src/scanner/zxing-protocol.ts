@@ -3,7 +3,7 @@
 import type { RawCode } from './types';
 
 export interface ZxingConfig {
-  /** zxing-wasm の名前 (ZXING_NAME) */
+  /** zxing-wasm の名前 (FORMAT_INFO の zxing) */
   formats: string[];
   /** 念入りに探す (回転・白黒反転したコードも探す。約 10 倍遅い) */
   tryHarder: boolean;

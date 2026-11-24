@@ -21,7 +21,7 @@ import { HistoryList, LatestCard } from './results-view';
 import { ScanLoop, ScanStats } from './scan-loop';
 import { browserScannerDeps, nativeFormats } from './scanner/browser';
 import { Scanner } from './scanner/scanner';
-import { SettingsStore, browserStorage, touches } from './settings';
+import { SettingsStore, browserStorage, mirrorFor, touches } from './settings';
 import { buildSettingsView } from './settings-view';
 import { Sheets } from './sheets';
 import { cameraErrorText, codeLabel, statusText } from './text';
@@ -181,8 +181,9 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) loop.resume();
 });
 
-// 設定が変わった時の動き (画面の部品は settings-view.ts が自分で表示を直す)
+// 設定が変わった時の動き (設定の画面の表示は settings-view.ts が自分で直す)。設定を足して動きが要る時は、ここに 1 行足す
 store.subscribe((s, changed) => {
+  if (changed.has('camera')) store.update(mirrorFor(s.camera)); // 前面カメラは左右反転にする
   if (touches(changed, 'formats', 'mode', 'tryHarder')) void configureScanner();
   if (touches(changed, 'res', 'camera') && camera.running) void startCamera();
   if (changed.has('mirror')) applyMirror(s.mirror);

@@ -2,10 +2,14 @@
 ._*
 .DS_Store
 
-# ビルドで作るもの (bin/build.sh で作り直せる)
+# ビルドで作るもの (作り直せる)
 # web/ は frontend/ のビルド結果 (ブラウザに配るファイル)。Go の実行ファイルに埋め込む
 /web/
 /build/
+/qr-server
+/qr-server.exe
+# HTTPS の証明書と秘密鍵 (秘密鍵は人に渡さない)
+*.pem
 
 # 画面の依存 (Docker の名前付きボリュームに置く。ここにあるのはマウント先の空のフォルダ)
 frontend/node_modules/
