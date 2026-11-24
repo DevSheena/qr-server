@@ -43,6 +43,9 @@
 
 端末からは `https://<サーバーの PC の IP アドレス>:8443/` で開く。文書に出てくる `192.168.1.10` は例で、実際の IP アドレスに置き換える。
 
+**`https://` は必ず付ける。** 省いたり `http://` で開いたりすると、画面に `Client sent an HTTP request to an HTTPS server.` とだけ出て使えない
+(HTTPS で待っているサーバーに、暗号化しない通信で来たため。何も漏れはしない)。iPhone の Safari などは、`https://` を省くと http で開く。
+
 | OS | 調べ方 |
 |---|---|
 | Windows | `ipconfig` の「IPv4 アドレス」 |

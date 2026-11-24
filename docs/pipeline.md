@@ -197,20 +197,33 @@ $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o qr-ser
 
 **Linux 用は `CGO_ENABLED=0` を付ける。** 付けないと、作った PC の C のライブラリ (glibc) に頼る実行ファイルになり、別の Linux では動かないことがある。
 
-### 2. 置いて起動する
+### 2. 初回 (サーバーの PC に初めて置く)
 
-1. 実行ファイルを、USB や scp で動かす PC の、書き込めるフォルダにコピーする
-2. 前の版が動いていれば Ctrl+C で止め、実行ファイルだけを置き換える (隣の `qr-server.crt`・`qr-server.key` は残す。消すと証明書が変わり、すべての端末でまた警告が出る)
-3. 起動する
+1. 実行ファイルを、USB や scp でサーバーの PC の**書き込めるフォルダ**にコピーする (Windows の `C:\Program Files` の中などは不可)
+2. 起動する
 
    ```bash
    ./qr-server-linux
    ```
 
-   初回は、同じフォルダに証明書 (`qr-server.crt`・`qr-server.key`) ができる。ログに出る「開く URL」を控える
-4. 別の端末で `https://<動かす PC の IP>:8443/api/health` を開き、`version` が記録したコミットと同じか確かめる (初回は警告を越える)
+   同じフォルダに証明書 (`qr-server.crt`・`qr-server.key`) ができる。ログに出る「開く URL」を控える
+3. ファイアウォールで 8443 番を開ける (Windows は確認画面で「プライベート ネットワーク」を許可。[環境と HTTPS](environment.md))
+4. 各端末で `https://<サーバーの PC の IP>:8443/` を開き、警告を「詳細」などから越える (**端末ごとに 1 回だけ**。`https://` は必ず付ける)
+5. `https://<サーバーの PC の IP>:8443/api/health` の `version` が、記録したコミットと同じか確かめる
 
-PC を起動した時に自動で立ち上げる設定 (Linux の systemd、Windows のタスク スケジューラ など) は、まだ用意していない。
+### 3. 2 回目以降 (更新する)
+
+1. 「1 回の流れ」でテスト・ビルド・記録をし、「1. 動かす PC 用に作る」で実行ファイルを作る
+2. サーバーの PC で、動いているものを Ctrl+C で止める
+3. **実行ファイルだけを置き換える。** 隣の `qr-server.crt`・`qr-server.key` は残す (消すと証明書が変わり、すべての端末でまた警告が出る)
+4. 起動し、`/api/health` の `version` が新しいコミットになったか確かめる。端末の側ですることは無い (警告も出ない)
+
+証明書を作り直す時 (IP アドレスが変わった・社内の証明書に替える・期限) は [環境と HTTPS](environment.md) の「証明書は自動で作る」。
+
+### サーバーが止まる時
+
+- 起動したウィンドウ (ターミナル・PowerShell) を閉じる、Ctrl+C を押す、PC を再起動する、のどれでも止まる
+- PC を起動した時に自動で立ち上げる設定 (Linux の systemd、Windows のタスク スケジューラ など) は、まだ用意していない
 
 ## うまくいかない時
 
@@ -219,6 +232,7 @@ PC を起動した時に自動で立ち上げる設定 (Linux の systemd、Wind
 | `go build` が `pattern web: no matching files found` で止まる | 画面をまだビルドしていない。`frontend` で `npm run build` |
 | `npm ci` が lock と合わないと言って止まる | `package.json` だけ書き換えた。`npm install` で lock も直す |
 | 起動すると `address already in use` (Windows では `Only one usage of each socket address`) | そのポートを別のプログラムが使っている。`-addr :8081` などに変える |
+| 画面に `Client sent an HTTP request to an HTTPS server.` とだけ出る | `http://` で開いた (`https://` を省くと http になるブラウザもある。iPhone の Safari など)。`https://` を付けて開き直す |
 | スマホでカメラが始まらない | HTTP で開いている (`-http` を付けて起動した)。HTTPS で開く ([環境と HTTPS](environment.md)) |
 | 起動すると「秘密鍵を保存できない」で止まる | 実行ファイルのフォルダに書き込めない。書き込めるフォルダに置く |
 | ログに「証明書に、この PC の今の IP アドレスが入っていない」 | IP アドレスが変わった。`qr-server.crt`・`qr-server.key` を消して起動し直す (端末ではもう一度警告が出る) |
